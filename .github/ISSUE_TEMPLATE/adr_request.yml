@@ -1,0 +1,57 @@
+name: ADR request
+description: Request an Architecture Decision Record for an open or hard-to-reverse decision.
+title: "[adr]: "
+labels: ["adr", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this when a change affects service boundaries, protocols,
+        persistence, authentication/authorization, broker semantics, the E2EE
+        protocol, contracts, or client storage.
+  - type: input
+    id: decision
+    attributes:
+      label: Decision to make
+      description: One sentence naming the decision.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Constraints, current behavior, and why the decision is needed now.
+    validations:
+      required: true
+  - type: textarea
+    id: options
+    attributes:
+      label: Options
+      description: Compare at least two viable options with trade-offs.
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Consequences
+      description: Operational cost, migration, security, compatibility, and reversibility.
+    validations:
+      required: true
+  - type: dropdown
+    id: blocks
+    attributes:
+      label: Does this block implementation?
+      options:
+        - "Yes: no work should proceed until decided"
+        - "No: work can proceed additively"
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I checked docs/architecture §9 for an existing open decision.
+          required: true
+        - label: I did not include secrets, plaintext, or real user data.
+          required: true

@@ -1,0 +1,62 @@
+name: Feature request
+description: Propose a product or engineering change.
+title: "[feature]: "
+labels: ["enhancement", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Read AGENTS.md and the architecture document before proposing a change
+        that crosses ownership boundaries. Open decisions in architecture §9
+        need an ADR, not an assumption.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user or engineering problem are we solving?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the behavior and the affected boundaries.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Affected areas
+      options:
+        - label: Social API
+        - label: Chat service
+        - label: Moderation API
+        - label: Event broker
+        - label: Web app
+        - label: Mobile app
+        - label: Admin app
+        - label: Contracts
+        - label: Infrastructure
+        - label: Documentation
+  - type: textarea
+    id: impact
+    attributes:
+      label: Data, security, and privacy impact
+      description: Persisted data, E2EE, metadata exposure, authorization, retention.
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I checked that this is not already covered by an accepted ADR.
+          required: true
+        - label: This proposal does not introduce a technology outside the fixed stack.
+          required: true
+        - label: I did not include secrets, plaintext, or real user data.
+          required: true

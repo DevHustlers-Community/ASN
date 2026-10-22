@@ -1,0 +1,21 @@
+# Default owner for everything in the repository.
+# Replace broad ownership with team handles as maintainers are added.
+* @HMH-3080
+
+# Ownership boundaries. Keep these in sync with the repository map in AGENTS.md.
+/services/social-api/       @HMH-3080
+/services/chat-service/     @HMH-3080
+/services/moderation-api/   @HMH-3080
+/services/event-broker/     @HMH-3080
+/apps/web/                  @HMH-3080
+/apps/mobile/               @HMH-3080
+/apps/admin/                @HMH-3080
+
+# Contracts and decisions require owner review before merge.
+/contracts/                 @HMH-3080
+/docs/architecture/         @HMH-3080
+/docs/decisions/            @HMH-3080
+/docs/changelog/            @HMH-3080
+/docs/security/             @HMH-3080
+/infrastructure/            @HMH-3080
+/.github/                   @HMH-3080

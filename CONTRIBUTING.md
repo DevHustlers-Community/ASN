@@ -85,6 +85,12 @@ Before submitting your changes:
 4. Add or update tests where applicable.
 5. Run relevant tests, formatters, linters, and other available checks.
 6. Update documentation when behavior, configuration, or public interfaces change.
+7. Add or update a change record under [`docs/changelog/`](docs/changelog/README.md).
+8. Enable the repository hooks once per clone:
+
+   ```bash
+   bash scripts/dev/install-git-hooks.sh
+   ```
 
 Do not include unrelated refactoring, secrets, credentials, personal configuration files, or generated files that should not be tracked.
 
@@ -96,7 +102,7 @@ Use clear and descriptive commit messages.
 
 We recommend Conventional Commits:
 
-- `feat: add group messaging`
+- `feat: add community channels`
 - `fix: prevent duplicate message delivery`
 - `docs: clarify local development setup`
 - `refactor: simplify connection management`
@@ -104,6 +110,19 @@ We recommend Conventional Commits:
 - `chore: update dependencies`
 
 Reference the related issue when appropriate.
+
+Every commit that changes repository content must include a change record in the
+same commit and a `Changelog:` trailer:
+
+```text
+Changelog: docs/changelog/2026-10-22-governance-and-changelog.md
+```
+
+The record filename uses `YYYY-MM-DD-short-slug.md` and must match the format in
+[`docs/changelog/README.md`](docs/changelog/README.md). Merge commits and commits
+that only edit `docs/changelog/` are exempt. Platform-created squash commits are
+exempt from the trailer; their pull request commits were already checked. Do not
+rewrite or delete merged records.
 
 Prefer small, logical commits over large commits containing unrelated changes.
 
@@ -122,6 +141,7 @@ Every Pull Request should include:
 - A clear summary of the changes.
 - The related issue, using `Closes #42` when applicable.
 - The motivation behind the change.
+- The change record path and the `Changelog:` commit trailer.
 - Tests performed and their results.
 - Screenshots or examples for user-facing changes, when relevant.
 - Any migration, compatibility, security, or configuration considerations.
@@ -141,7 +161,7 @@ Contributors must not merge their own Pull Requests.
 A Pull Request may be merged when:
 
 - Its purpose and scope are clear.
-- Required automated checks pass.
+- Required automated checks pass, including the governance change-record check.
 - Relevant tests pass.
 - Review feedback has been addressed.
 - No blocking discussions remain.
@@ -233,7 +253,7 @@ Before publishing a release, maintainers should:
 2. Run the required tests and regression checks.
 3. Review relevant security and dependency changes.
 4. Verify migration and upgrade instructions.
-5. Update the changelog or release notes.
+5. Aggregate the release's change records into `CHANGELOG.md` and write user-facing release notes.
 6. Update version information where applicable.
 7. Create the official version tag and GitHub Release.
 8. Document known issues and relevant upgrade considerations.
@@ -329,7 +349,24 @@ Review code and ideas on their technical merits, and provide actionable feedback
 
 Contributors are expected to respect agreed issue scopes, review decisions, and project policies.
 
-## 10. Questions
+## 10. Change Records and Changelog
+
+Every content commit has one record in [`docs/changelog/`](docs/changelog/README.md).
+The record states what changed, why, and what was verified. It is the source for
+release notes and review context.
+
+- Name the file `YYYY-MM-DD-short-slug.md` and match the UTC commit date.
+- Include the required front matter from the folder README.
+- Add the `Changelog:` trailer to the commit message.
+- Never put secrets, plaintext chat content, private keys, real user data, or
+  exploit details in a record.
+- Do not delete merged records; correct them with a follow-up record.
+
+At release time, maintainers aggregate the records into
+[`CHANGELOG.md`](CHANGELOG.md). The architecture document remains a description of
+the current design and must not accumulate change history.
+
+## 11. Questions
 
 If you are unsure where to start, ask in the relevant issue or discussion before beginning a large implementation.
 

@@ -1,0 +1,85 @@
+name: Bug report
+description: Report a reproducible defect in ASN.
+title: "[bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not include secrets, tokens, private keys, real user data, or E2EE
+        plaintext. Report security vulnerabilities privately per SECURITY.md.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What is broken, and where?
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      options:
+        - Social API
+        - Chat service
+        - Moderation API
+        - Event broker
+        - Web app
+        - Mobile app
+        - Admin app
+        - Contracts
+        - Infrastructure
+        - Documentation
+        - Unknown
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      description: Minimal, deterministic steps. Include commands or requests.
+      placeholder: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: Release tag, branch, or commit SHA where the issue occurs.
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, runtime versions, deployment target, relevant configuration.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or evidence
+      description: Redact secrets, tokens, plaintext, and personal data.
+      render: shell
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues and this is not a duplicate.
+          required: true
+        - label: This is not a security vulnerability (those go to SECURITY.md).
+          required: true
+        - label: I removed secrets, plaintext, and real user data from this report.
+          required: true

@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/DevHustlers-Community/ASN/blob/main/SECURITY.md
+    about: Read the private reporting policy. Never open a public issue.
+  - name: Documentation
+    url: https://github.com/DevHustlers-Community/ASN/blob/main/docs/README.md
+    about: Architecture, decisions, glossary, and operations documentation.
+  - name: Contributing guide
+    url: https://github.com/DevHustlers-Community/ASN/blob/main/CONTRIBUTING.md
+    about: Workflow, branching, review, and change-record requirements.

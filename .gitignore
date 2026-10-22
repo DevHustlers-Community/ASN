@@ -1,0 +1,61 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# TypeScript / Bun build output
+dist/
+build/
+coverage/
+*.tsbuildinfo
+
+# Elixir
+_build/
+deps/
+*.beam
+.elixir_ls/
+erl_crash.dump
+
+# React Native / native
+apps/mobile/ios/Pods/
+apps/mobile/ios/build/
+apps/mobile/android/.gradle/
+apps/mobile/android/build/
+apps/mobile/android/local.properties
+
+# Local databases and snapshots
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+*.snapshot
+snapshots/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.keystore
+*.jks
+
+# Editor and OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.swp
+
+# Logs
+*.log
+logs/
+
+# Test artifacts
+/tmp/
+.playwright/
+
+# Python
+__pycache__/
+*.pyc
