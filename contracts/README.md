@@ -4,7 +4,7 @@ The single source of truth for communication between services and clients.
 
 | Folder | Contents |
 |---|---|
-| [`openapi/`](openapi/README.md) | REST API contracts, one file per service |
+| [`openapi/`](openapi/README.md) | REST API contracts, one file per REST service or HTTP transport |
 | [`events/`](events/README.md) | Versioned JSON Schema event payloads and the shared envelope |
 | [`VERSIONING.md`](VERSIONING.md) | Versioning, compatibility, and deprecation rules |
 

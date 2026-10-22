@@ -7,7 +7,7 @@ One OpenAPI 3.x file per REST service.
 | `social-api.yaml` | Social API |
 | `chat-api.yaml` | Chat service |
 | `moderation-api.yaml` | Moderation API |
-| `event-broker-api.yaml` | Event broker |
+| `event-broker-api.yaml` | Event broker, only if ADR 0008 selects an HTTP transport |
 
 **Conventions:**
 
@@ -24,4 +24,5 @@ One OpenAPI 3.x file per REST service.
 branch, and client generation drift check.
 
 **Status:** not written yet. Authoring starts with the Social API and Chat
-endpoints needed by the first vertical slice.
+endpoints needed by the first vertical slice. The broker OpenAPI file waits on
+ADR 0008.

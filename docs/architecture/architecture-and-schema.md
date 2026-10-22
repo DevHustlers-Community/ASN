@@ -1,7 +1,7 @@
 # ASN — Architecture and Database Schema
 
 **Status:** Draft — target architecture and data model
-**Database engine:** PostgreSQL 16+
+**Database engine:** PostgreSQL 18+ (local baseline 18.6)
 **Scope:** `social_db`, `chat_db`, `moderation_db`, `broker_db`
 **Document type:** Architecture and data-model specification; not a migration-ready SQL bundle
 
@@ -54,7 +54,7 @@ The following decisions define the current target architecture. They change only
 
 ## 1. System Architecture and API Contract
 
-ASN is composed of three business services with clear data ownership, plus a custom event broker. All services expose REST APIs. Chat also exposes a WebSocket endpoint for live delivery. Cross-service asynchronous integration goes through the broker.
+ASN is composed of three business services with clear data ownership, plus a custom event broker. The three business services expose REST APIs; Chat also exposes a WebSocket endpoint for live delivery. The broker publishes and consumes asynchronous events over the transport selected by ADR 0008. Cross-service integration goes through the broker.
 
 ### 1.1 Service and runtime ownership
 
@@ -63,11 +63,13 @@ ASN is composed of three business services with clear data ownership, plus a cus
 | Social API | Bun + TypeScript; REST | `social_db` | Accounts, profiles, follows, blocks, posts, articles, reactions, feed inputs, activity calendar, communities, roles/channels, notification state, plan flags, account deletion workflow |
 | Chat service | Elixir + Phoenix + Ecto; REST + WebSockets/Channels | `chat_db` | Friendships, chat privacy, direct/community conversations, encrypted message envelopes, public device keys/prekeys, upload tracking, receipts, push devices, chat streaks |
 | Moderation service | Bun + TypeScript; REST | `moderation_db` | Platform reports/cases, user-submitted evidence snapshots, moderation actions, appeals, strikes, staff audit log |
-| Event broker | Elixir/OTP; REST publish + consumer delivery API | `broker_db` | Durable event log, subscriptions, delivery state, acknowledgements, retries, dead letters, retention, replay |
+| Event broker | Elixir/OTP + Ecto; publish/consume API, transport selected by ADR 0008 | `broker_db` | Durable event log, subscriptions, delivery state, acknowledgements, retries, dead letters, retention, replay |
 | Object storage | S3-compatible storage / Cloudflare R2 as selected | None | Public media and private/encrypted media; services store object keys, never permanent URLs |
 | Edge / reverse proxy | Nginx or equivalent routing layer | None | TLS termination, routing, request-size limits, edge protections; not a business service |
 
 The stack is intentionally polyglot. Services share API and event contracts, not a runtime, an ORM, or direct database access.
+
+Local development pins Elixir 1.20.4 on OTP 29.1.2, Phoenix 1.8.16 for Chat, Ecto 3.14/Postgrex 0.22, Bandit 1.13, and PostgreSQL 18.6. The broker is Ecto-backed but transport-neutral until ADR 0008; it does not embed Phoenix. These are development baselines, not contract versions.
 
 ### 1.2 Runtime architecture diagram
 
@@ -102,9 +104,9 @@ flowchart TB
   CHAT --> CO[Chat Outbox Relay]
   MOD --> MO[Moderation Outbox Relay]
 
-  SO -->|HTTP publish| BROKER["Event Broker<br/>Elixir/OTP"]
-  CO -->|HTTP publish| BROKER
-  MO -->|HTTP publish| BROKER
+  SO -->|publish| BROKER["Event Broker<br/>Elixir/OTP"]
+  CO -->|publish| BROKER
+  MO -->|publish| BROKER
   BROKER <--> BDB[(broker_db)]
 
   BROKER -. deliver / ack .-> SOCIAL
@@ -196,7 +198,7 @@ A successful message send is acknowledged only after the Chat service commits th
 
 ### 1.6 Transactional outbox and event delivery through the custom broker
 
-Each service writes the business change and its `outbox_events` row in the same local PostgreSQL transaction. A relay publishes committed outbox rows to the broker over the broker's HTTP API using a stable `event_id`. The broker persists the event, routes it to eligible durable subscriptions, and tracks delivery state in `broker_db`.
+Each service writes the business change and its `outbox_events` row in the same local PostgreSQL transaction. A relay publishes committed outbox rows to the broker using a stable `event_id`; the transport is selected by ADR 0008. The broker persists the event, routes it to eligible durable subscriptions, and tracks delivery state in `broker_db`.
 
 ```mermaid
 sequenceDiagram
@@ -215,10 +217,10 @@ sequenceDiagram
   DB-->>API: Commit
   API-->>Client: HTTP response
   Relay->>DB: Read unpublished outbox rows
-  Relay->>Broker: POST event (event_id, schema_version, payload)
+  Relay->>Broker: Publish event (event_id, schema_version, payload)
   Broker->>BDB: Persist event + fan out to subscriptions
   BDB-->>Broker: Commit
-  Broker-->>Relay: 202 Accepted (idempotent on event_id)
+  Broker-->>Relay: Publish acknowledged (idempotent on event_id)
   Relay->>DB: Mark outbox row published
   Consumer->>Broker: Fetch/lease deliveries
   Broker-->>Consumer: Delivery (visibility timeout starts)
@@ -234,7 +236,7 @@ Broker delivery guarantees and rules:
 - **Ack / nack:** `nack` retries with bounded exponential backoff; retries are exhausted into a dead-letter state that is inspectable and replayable.
 - **Ordering:** per-aggregate ordering is required for projections (at most one in-flight delivery per `aggregate_id` per subscription). Global ordering is explicitly not promised. Independent aggregates and conversations proceed concurrently.
 - **Replay:** a subscription can be reset to an event ID or timestamp; consumers must remain idempotent because replay re-delivers old events.
-- **Publish idempotency:** duplicate `POST /events` with the same `event_id` is accepted and stored once.
+- **Publish idempotency:** a duplicate publish with the same `event_id` is accepted and stored once.
 - **Payload limits:** broker events carry identifiers and small deltas, not blobs. Oversized payloads use claim-check references to object storage.
 - **Auth:** services authenticate with dedicated service credentials; per-subscription publish/consume authorization is enforced by the broker. The token/mTLS mechanism is an ADR decision.
 - **Retention:** events and delivery records have a retention window (initial proposal: 7–30 days for deliveries, longer for the event log) before cleanup; the exact policy is an ADR decision.
@@ -295,7 +297,7 @@ Elixir/Phoenix services follow normal OTP release and supervision practices; no 
 
 | Topic | Rule |
 |---|---|
-| Primary keys | `uuid`; generate UUIDv7 in application code through one vetted library per runtime (TypeScript and Elixir). Do not assume PostgreSQL 16 provides a built-in `uuidv7()` function. |
+| Primary keys | `uuid`; generate UUIDv7 in application code through one vetted library per runtime (TypeScript and Elixir). PostgreSQL 18 also provides `uuidv7()`, but database-generated IDs are not the default; adopting them requires an ADR. |
 | Ordering | Never assume `ORDER BY id` equals `ORDER BY created_at`. Use an explicit order, normally `created_at, id` or a domain sequence such as `seq`. |
 | Timestamps | `timestamptz`, stored in UTC. Use `created_at`, `updated_at`, `deleted_at`. |
 | Soft delete | Content may use `deleted_at`/`status`; physical purge follows retention and account-deletion workflows. Deleting server ciphertext cannot guarantee every recipient erased a plaintext copy already seen. |
@@ -666,7 +668,7 @@ Required checks:
 
 - `status` includes `active`, `suspended`, `banned`, and `pending_deletion` consistently.
 - Set `sessions_valid_after` on bans, suspensions, sensitive security events, and deletion. Every service honors it through events/tokens or an explicit short-lived authorization cache policy.
-- UUIDs are generated by the application on PostgreSQL 16 unless a separately verified extension/function is installed.
+- UUIDs are generated by the application; PostgreSQL 18's `uuidv7()` is available but not used by default.
 - `auth0_sub` identifies the upstream identity, not an authorization decision. Validate issuer/audience and account status in the API.
 
 ### 4.2 `user_privacy_settings`
@@ -714,7 +716,7 @@ Constraints:
 
 ### 4.9 `post_likes`, `comment_likes`, `reposts`
 
-Keep the models and their composite uniqueness/FKs. PostgreSQL 15+ supports `UNIQUE NULLS NOT DISTINCT`; with PostgreSQL 16+ this form is available. Keep rules for global resharing of community posts in authorization logic and never permit private-community posts to be reshared globally.
+Keep the models and their composite uniqueness/FKs. PostgreSQL 15+ supports `UNIQUE NULLS NOT DISTINCT`; on PostgreSQL 18+ this form is available. Keep rules for global resharing of community posts in authorization logic and never permit private-community posts to be reshared globally.
 
 ### 4.10 `notifications`
 
@@ -993,8 +995,8 @@ These do not block schema work, but must be finalized before protocol implementa
 - Signal Double Ratchet: https://signal.org/docs/specifications/doubleratchet/
 - Signal Sesame: https://signal.org/docs/specifications/sesame/
 - MLS standard, RFC 9420: https://www.rfc-editor.org/rfc/rfc9420
-- PostgreSQL 16 partitioning limitations: https://www.postgresql.org/docs/16/ddl-partitioning.html
-- PostgreSQL 16 constraints: https://www.postgresql.org/docs/16/ddl-constraints.html
+- PostgreSQL 18 partitioning limitations: https://www.postgresql.org/docs/18/ddl-partitioning.html
+- PostgreSQL 18 constraints: https://www.postgresql.org/docs/18/ddl-constraints.html
 - RFC 9457 — Problem Details for HTTP APIs: https://www.rfc-editor.org/rfc/rfc9457.html
 - OpenAPI Specification: https://spec.openapis.org/oas/latest.html
 

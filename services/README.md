@@ -9,7 +9,7 @@ and publishes domain events through its transactional outbox.
 | [`social-api/`](social-api/README.md) | Bun + TypeScript | `social_db` | Accounts, content, communities, feed |
 | [`chat-service/`](chat-service/README.md) | Elixir + Phoenix | `chat_db` | Conversations, encrypted messages, devices |
 | [`moderation-api/`](moderation-api/README.md) | Bun + TypeScript | `moderation_db` | Reports, cases, appeals, audit |
-| [`event-broker/`](event-broker/README.md) | Elixir/OTP | `broker_db` | Durable event delivery |
+| [`event-broker/`](event-broker/README.md) | Elixir/OTP + Ecto | `broker_db` | Durable event delivery |
 
 ## Rules shared by all services
 
@@ -30,5 +30,6 @@ and publishes domain events through its transactional outbox.
 
 Each service README documents its own setup. Shared dependencies (PostgreSQL,
 object storage, proxy) are described in
-[`infrastructure/`](../infrastructure/README.md). Every service exposes a health
-endpoint before any feature work starts.
+[`infrastructure/`](../infrastructure/README.md). The Chat and broker scaffolds
+run against local PostgreSQL; their contract-first health endpoints land with the
+first API contract.

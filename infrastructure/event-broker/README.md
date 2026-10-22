@@ -29,4 +29,4 @@ Operational notes for the custom Elixir/OTP broker and `broker_db`.
 **Capacity:** single node until measurements justify more. Record throughput,
 p95/p99 delivery latency, and database growth per event.
 
-**Status:** runbook to be written with the broker proof of concept.
+**Status:** the broker scaffold and local database exist. The runbook, metrics, and alerts land with the proof of concept.

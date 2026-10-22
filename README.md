@@ -3,8 +3,10 @@
 An open-source social platform for conversations, communities, and real-time
 communication.
 
-> Status: architecture and repository scaffolding. No production service is
-> runnable yet. The current design is documented in
+> Status: architecture and incremental service scaffolding. The Chat and Event
+> broker apps compile and run locally against PostgreSQL 18; no product APIs,
+> API/event contracts, or migrations exist yet. The current design is
+> documented in
 > [`docs/architecture/architecture-and-schema.md`](docs/architecture/architecture-and-schema.md).
 
 ## Stack
@@ -14,10 +16,10 @@ communication.
 | Social API | Bun + TypeScript |
 | Chat service | Elixir + Phoenix + Ecto |
 | Moderation API | Bun + TypeScript |
-| Event broker | Elixir/OTP, PostgreSQL-backed (custom, no external broker) |
+| Event broker | Elixir/OTP + Ecto, PostgreSQL-backed (custom, no external broker) |
 | Web and admin | React + TypeScript |
 | Mobile | React Native + TypeScript |
-| Database | PostgreSQL 16+, one database per service |
+| Database | PostgreSQL 18+ (local baseline 18.6), one database per service |
 | Media | S3-compatible object storage (R2) |
 
 ## Repository map
@@ -48,10 +50,10 @@ communication.
 
 ## Getting started
 
-The local environment, prerequisites, and commands are documented in
-[`docs/development/`](docs/development/README.md) as each service is scaffolded.
-Environment variables are named in [`.env.example`](.env.example); never commit
-real credentials.
+See [`docs/development/getting-started.md`](docs/development/getting-started.md)
+for prerequisites, the local PostgreSQL stack, and the Chat and broker run
+commands. Environment variables are named in [`.env.example`](.env.example);
+never commit real credentials.
 
 ## Contributing
 

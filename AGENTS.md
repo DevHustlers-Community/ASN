@@ -9,10 +9,11 @@ tool that reads `AGENTS.md` gets the same rules.
 ASN (Arabian Social Network) is an open-source social platform with posts,
 communities, real-time chat, and end-to-end encrypted messaging.
 
-**Current state:** architecture and repository scaffolding. There are no
-application manifests, runnable services, or migrations yet. Do not assume a
-service can be started. Most work right now is documentation, contracts, and
-service scaffolding.
+**Current state:** architecture and incremental service scaffolding. The Chat
+service and Event broker have Elixir manifests, pin Elixir 1.20.4/OTP 29.1.2,
+compile, and run against PostgreSQL 18.6. There are no product endpoints,
+OpenAPI or event contracts, migrations, or TypeScript manifests yet. Do not
+assume a feature is runnable.
 
 **License:** AGPL-3.0.
 
@@ -52,12 +53,16 @@ Rules:
 | Social API | Bun + TypeScript, REST | `social_db` |
 | Chat service | Elixir + Phoenix + Ecto, REST + WebSockets | `chat_db` |
 | Moderation API | Bun + TypeScript, REST | `moderation_db` |
-| Event broker | Custom Elixir/OTP, PostgreSQL-backed | `broker_db` |
+| Event broker | Custom Elixir/OTP + Ecto, PostgreSQL-backed, transport-neutral | `broker_db` |
 | Web and admin | React + TypeScript | - |
 | Mobile | React Native + TypeScript | encrypted local SQLite |
 | Object storage | S3-compatible (R2) | - |
 
 `broker_db` is owned by the broker service. No other service reads or writes it.
+
+Local development pins Elixir 1.20.4 on OTP 29.1.2 via [`.tool-versions`](.tool-versions),
+Phoenix 1.8.16 for Chat, and PostgreSQL 18.6 via [`compose.yaml`](compose.yaml).
+Service lockfiles pin the resolved dependency versions.
 
 ## 4. Repository map
 
@@ -195,7 +200,9 @@ Detect commands from manifests; do not invent them.
 | Area | Expected command | Status |
 |---|---|---|
 | JS/TS | `bun install`, then package scripts (`typecheck`, `lint`, `test`) | No manifests yet |
-| Elixir | `mix deps.get`, `mix format --check-formatted`, `mix compile --warnings-as-errors`, `mix test` | No `mix.exs` yet |
+| Elixir (Chat) | `cd services/chat-service && mix deps.get && mix format --check-formatted && mix compile --warnings-as-errors && mix test` | Available; `mix test` requires local PostgreSQL |
+| Elixir (broker) | `cd services/event-broker && mix deps.get && mix format --check-formatted && mix compile --warnings-as-errors && mix test` | Available; `mix test` requires local PostgreSQL |
+| Local PostgreSQL | `docker compose up -d postgres`; wait for `healthy` | Available |
 | Contracts | validation and client generation via `scripts/contracts/` | Not implemented |
 | Change records | `python3 scripts/ci/check-changelog.py --all`; `python3 scripts/ci/check-commit-trailer.py <msg-file>` | Available |
 | Docs | `python3 scripts/ci/check-links.py`; no contradictory statements | Available |

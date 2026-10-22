@@ -3,6 +3,9 @@
 Local and deployed infrastructure. This folder contains configuration and
 operational documentation, not application logic.
 
+Local dependencies run from [`compose.yaml`](../compose.yaml) at the repository
+root. Today it contains one PostgreSQL 18.6 service.
+
 | Folder | Purpose |
 |---|---|
 | [`docker/`](docker/README.md) | Image and compose conventions |

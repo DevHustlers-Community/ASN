@@ -15,6 +15,10 @@ the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Governance templates, CODEOWNERS, and a governance CI workflow.
 - Per-commit change records and `Changelog:` commit trailers.
 - Contract versioning and deprecation policy.
+- API-only Phoenix scaffold for the Chat service and a transport-neutral
+  Elixir/OTP scaffold for the Event broker.
+- PostgreSQL 18.6 local compose service with isolated service roles, databases,
+  and test databases.
 
 ### Changed
 

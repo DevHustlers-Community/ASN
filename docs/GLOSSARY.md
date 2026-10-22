@@ -486,7 +486,8 @@ reported as an exact unread count.
 
 **UUIDv7** `[Data]` — A time-ordered UUID defined by RFC 9562: 48 bits of Unix
 milliseconds followed by random bits. Generated in application code with one
-vetted library per runtime; PostgreSQL 16 does not provide it by default.
+vetted library per runtime. PostgreSQL 18 provides `uuidv7()` as well, but the
+project does not use database-generated IDs by default.
 
 **VACUUM INTO** `[Client]` — A SQLite statement (3.27.0+) that writes a vacuumed,
 consistent snapshot to a new file; it is an alternative to the backup API. Used
