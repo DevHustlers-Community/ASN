@@ -1,0 +1,177 @@
+/* ==========================================================================
+   ASN Design Tokens — CSS Custom Properties
+   ========================================================================== */
+
+:root {
+  /* Default: OLED Black Surface Base */
+  --bg-base: #09090b;
+  --bg-surface: #121215;
+  --bg-card: #18181b;
+  --bg-elevated: #27272a;
+  --bg-overlay: #3f3f46;
+
+  /* Typography Colors - WCAG AA compliant */
+  --text-main: #f4f4f5;
+  --text-muted: #a1a1aa;
+  --text-dim: #9ca3af;
+
+  /* Borders */
+  --border: #27272a;
+  --border-subtle: #1f1f23;
+
+  /* Default Primary Accent: Emerald */
+  --primary-rgb: 16 185 129;
+  --primary: #10b981;
+  --primary-hover: #059669;
+  --primary-foreground: #011910;
+  --primary-text: #10b981;
+
+  /* Immutable Semantic Status Tokens */
+  --status-success-rgb: 16 185 129;
+  --status-success: #10b981;
+  --status-success-foreground: #34d399;
+
+  --status-destructive-rgb: 220 38 38;
+  --status-destructive: #dc2626;
+  --status-destructive-foreground: #fca5a5;
+
+  --status-warning-rgb: 245 158 11;
+  --status-warning: #f59e0b;
+  --status-warning-foreground: #fbbf24;
+
+  --status-info-rgb: 14 165 233;
+  --status-info: #0ea5e9;
+  --status-info-foreground: #38bdf8;
+
+  /* Geometry & Grid */
+  --radius-card: 12px;
+  --radius-btn: 8px;
+  --radius-pill: 9999px;
+
+  /* Typography Scales */
+  --leading-body: 1.65;
+}
+
+/* Surface Themes */
+[data-theme="oled"] {
+  --bg-base: #000000;
+  --bg-surface: #09090b;
+  --bg-card: #121215;
+  --bg-elevated: #1f1f23;
+  --border: #27272a;
+  --border-subtle: #18181b;
+  --text-main: #fafafa;
+  --text-muted: #a1a1aa;
+  --text-dim: #9ca3af;
+  --status-destructive-rgb: 220 38 38;
+  --status-destructive: #dc2626;
+  --status-destructive-foreground: #fca5a5;
+  --status-success-foreground: #34d399;
+  --status-warning-foreground: #fbbf24;
+  --status-info-foreground: #38bdf8;
+}
+
+[data-theme="dim"] {
+  --bg-base: #0f172a;
+  --bg-surface: #1e293b;
+  --bg-card: #1e293b;
+  --bg-elevated: #334155;
+  --border: #334155;
+  --border-subtle: #1e293b;
+  --text-main: #f8fafc;
+  --text-muted: #94a3b8;
+  --text-dim: #9ca3af;
+  --status-destructive-rgb: 220 38 38;
+  --status-destructive: #dc2626;
+  --status-destructive-foreground: #fca5a5;
+  --status-success-foreground: #34d399;
+  --status-warning-foreground: #fbbf24;
+  --status-info-foreground: #38bdf8;
+}
+
+[data-theme="light"] {
+  --bg-base: #f8fafc;
+  --bg-surface: #f1f5f9;
+  --bg-card: #ffffff;
+  --bg-elevated: #e2e8f0;
+  --border: #e2e8f0;
+  --border-subtle: #f1f5f9;
+  --text-main: #0f172a;
+  --text-muted: #334155;
+  --text-dim: #475569;
+  --status-success-rgb: 5 150 105;
+  --status-success: #059669;
+  --status-success-foreground: #065f46;
+  --status-destructive-rgb: 185 28 28;
+  --status-destructive: #b91c1c;
+  --status-destructive-foreground: #991b1b;
+  --status-warning-rgb: 217 119 6;
+  --status-warning: #d97706;
+  --status-warning-foreground: #92400e;
+  --status-info-rgb: 2 132 199;
+  --status-info: #0284c7;
+  --status-info-foreground: #075985;
+  --primary-text: #047857;
+}
+
+/* Accent Themes */
+[data-accent="emerald"] {
+  --primary-rgb: 16 185 129;
+  --primary: #10b981;
+  --primary-hover: #059669;
+  --primary-foreground: #011910;
+  --primary-text: #10b981;
+}
+
+[data-accent="indigo"] {
+  --primary-rgb: 79 70 229;
+  --primary: #4f46e5;
+  --primary-hover: #4338ca;
+  --primary-foreground: #ffffff;
+  --primary-text: #4f46e5;
+}
+
+[data-accent="amber"] {
+  --primary-rgb: 245 158 11;
+  --primary: #f59e0b;
+  --primary-hover: #d97706;
+  --primary-foreground: #260e02;
+  --primary-text: #f59e0b;
+}
+
+[data-accent="crimson"] {
+  --primary-rgb: 225 29 72;
+  --primary: #e11d48;
+  --primary-hover: #be123c;
+  --primary-foreground: #ffffff;
+  --primary-text: #e11d48;
+}
+
+[data-accent="cyan"] {
+  --primary-rgb: 6 182 212;
+  --primary: #06b6d4;
+  --primary-hover: #0891b2;
+  --primary-foreground: #011d27;
+  --primary-text: #06b6d4;
+}
+
+/* Per-accent High-Contrast Text Overrides for Light Mode (WCAG AA >= 4.5:1) */
+[data-theme="light"][data-accent="emerald"] {
+  --primary-text: #047857;
+}
+
+[data-theme="light"][data-accent="indigo"] {
+  --primary-text: #4338ca;
+}
+
+[data-theme="light"][data-accent="amber"] {
+  --primary-text: #b45309;
+}
+
+[data-theme="light"][data-accent="crimson"] {
+  --primary-text: #be123c;
+}
+
+[data-theme="light"][data-accent="cyan"] {
+  --primary-text: #0e7490;
+}

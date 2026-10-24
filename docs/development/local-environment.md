@@ -1,7 +1,7 @@
 # Local environment
 
 The local stack is intentionally small: one PostgreSQL 18.6 container plus the
-Elixir services you choose to run on the host.
+services you choose to run on the host.
 
 ## Versions
 
@@ -9,6 +9,7 @@ Elixir services you choose to run on the host.
 |---|---|---|
 | Erlang / OTP | 29.1.2 | [`.tool-versions`](../../.tool-versions) |
 | Elixir | 1.20.4-otp-29 | [`.tool-versions`](../../.tool-versions) |
+| Bun | 1.4.4 | [`.tool-versions`](../../.tool-versions) |
 | Phoenix | 1.8.16 | `services/chat-service/mix.lock` |
 | PostgreSQL | 18.6 | [`compose.yaml`](../../compose.yaml) |
 | Database image | `postgres:18.6-alpine3.24` | [`compose.yaml`](../../compose.yaml) |
@@ -25,7 +26,7 @@ drill before changing the baseline.
 | `4001` | Social API | Reserved; no manifest |
 | `4003` | Moderation API | Reserved; no manifest |
 | `4004` | Event broker HTTP | Reserved; only if ADR 0008 selects HTTP |
-| `3000` | Web | Reserved; no manifest |
+| `3000` | Web | Vite dev server (`apps/web`) |
 | `3001` | Admin | Reserved; no manifest |
 
 ## Databases and roles

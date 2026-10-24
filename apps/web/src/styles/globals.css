@@ -1,0 +1,24 @@
+@import './fonts.css';
+@import './tokens.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  
+  html {
+    @apply antialiased scroll-smooth;
+  }
+
+  body {
+    background-color: var(--bg-base);
+    color: var(--text-main);
+    font-family: 'IBM Plex Sans Arabic', 'IBM Plex Sans', system-ui, sans-serif;
+    line-height: var(--leading-body);
+    min-height: 100vh;
+  }
+}
