@@ -3,6 +3,7 @@
   "compilerOptions": {
     "baseUrl": ".",
     "noEmit": true,
+    "types": ["bun-types"],
     "paths": {
       "@/*": ["./src/*"]
     }

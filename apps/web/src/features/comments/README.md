@@ -1,5 +1,7 @@
 # Comments Feature (`src/features/comments`)
 
+**Status:** planned — no implementation yet.
+
 Handles threaded, nested conversation hierarchies beneath posts.
 
 ## Architecture & UX

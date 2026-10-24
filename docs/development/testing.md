@@ -1,13 +1,13 @@
 # Testing
 
-ASN uses ExUnit for the Elixir services. There is no JavaScript test runner yet
-because the TypeScript applications have no manifests.
+ASN uses ExUnit for the Elixir services and Bun's test runner (`bun test`) with
+`happy-dom` for the web client (`apps/web`).
 
 ## Test layers
 
 | Layer | Purpose | Runs against |
 |---|---|---|
-| Unit | Pure rules, validation, state transitions | No database |
+| Unit | Pure rules, validation, state transitions | No database (or DOM simulator) |
 | Integration | Ecto queries, constraints, transactions, repo behavior | Real PostgreSQL |
 | Failure | Retries, duplicate delivery, restarts, revoked devices, races | Real PostgreSQL plus controlled failures |
 | Contract | OpenAPI and event envelope compatibility | Contracts and generated clients |
@@ -34,7 +34,15 @@ mix compile --warnings-as-errors
 mix test
 ```
 
-The `test` aliases create and migrate the test databases before ExUnit starts.
+Web client:
+
+```bash
+bun run test
+# or from monorepo root:
+bun run --filter '@asn/web' test
+```
+
+The Elixir `test` aliases create and migrate the test databases before ExUnit starts.
 Start PostgreSQL first:
 
 ```bash
@@ -61,6 +69,7 @@ Current scaffold:
 | `services/chat-service/test/support/data_case.ex` | Database and sandbox setup |
 | `services/event-broker/test/asn_event_broker_test.exs` | Application smoke test |
 | `services/event-broker/test/support/data_case.ex` | Database and sandbox setup |
+| `apps/web/src/test/` | Web client component, utility, and DOM tests |
 
 Planned layers as features land: `test/unit/`, `test/integration/`, and
 `test/failure/` inside the owning service. Add directories only with tests.
@@ -87,6 +96,8 @@ Planned layers as features land: `test/unit/`, `test/integration/`, and
 
 ## Current status
 
-The scaffolds have two Chat tests (JSON error rendering) and one broker smoke
-test. No integration, contract, or failure tests exist yet because there is no
+The Elixir scaffolds have two Chat tests (JSON error rendering) and one broker
+smoke test. The web client has 10 unit and component tests (`src/test/`) covering
+utilities, button variants, badge tokens, and theme attributes. No integration,
+contract, or failure tests exist yet for backend services because there is no
 product behavior to test.

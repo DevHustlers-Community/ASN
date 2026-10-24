@@ -11,8 +11,8 @@ export const Avatar = React.forwardRef<React.ElementRef<typeof AvatarPrimitive.R
   ({ className, presence, presenceSize = 'md', children, ...props }, ref) => {
     const presenceDotSizes = {
       sm: 'w-2 h-2 border',
-      md: 'w-2.5 h-2.5 border-2',
-      lg: 'w-3.5 h-3.5 border-2',
+      md: 'w-3 h-3 border-2',
+      lg: 'w-4 h-4 border-2',
     };
 
     return (
@@ -26,7 +26,7 @@ export const Avatar = React.forwardRef<React.ElementRef<typeof AvatarPrimitive.R
         </AvatarPrimitive.Root>
         {presence && (
           <span
-            aria-label={`الحالة: ${presence}`}
+            role="status"
             className={cn(
               'absolute bottom-0 start-0 rounded-full border-base',
               presenceDotSizes[presenceSize],
@@ -34,7 +34,11 @@ export const Avatar = React.forwardRef<React.ElementRef<typeof AvatarPrimitive.R
               presence === 'offline' && 'bg-zinc-500',
               presence === 'away' && 'bg-status-warning'
             )}
-          />
+          >
+            <span className="sr-only">
+              {presence === 'online' ? 'متصل الآن' : presence === 'away' ? 'غير متاح' : 'غير متصل'}
+            </span>
+          </span>
         )}
       </div>
     );
@@ -48,7 +52,7 @@ export const AvatarImage = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <AvatarPrimitive.Image ref={ref} className={cn('aspect-square h-full w-full object-cover', className)} {...props} />
 ));
-AvatarImage.displayName = AvatarPrimitive.Image.displayName;
+AvatarImage.displayName = AvatarPrimitive.Root.displayName;
 
 export const AvatarFallback = React.forwardRef<
   React.ElementRef<typeof AvatarPrimitive.Fallback>,
@@ -56,8 +60,11 @@ export const AvatarFallback = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <AvatarPrimitive.Fallback
     ref={ref}
-    className={cn('flex h-full w-full items-center justify-center rounded-pill font-bold text-xs text-text-main bg-elevated', className)}
+    className={cn(
+      'flex h-full w-full items-center justify-center rounded-pill bg-elevated text-xs font-medium text-text-main font-mono',
+      className
+    )}
     {...props}
   />
 ));
-AvatarFallback.displayName = AvatarPrimitive.Fallback.displayName;
+AvatarFallback.displayName = AvatarPrimitive.Root.displayName;

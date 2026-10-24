@@ -1,7 +1,7 @@
 # ASN — Frontend Design System and Component Specification
 
-**Status:** Approved — target design system and token specification  
-**Scope:** `apps/web`, `apps/admin`, `packages/tokens`, shared component primitives  
+**Status:** Proposed — target frontend design system and token specification (Owner: Web Client Team, Date: 2026-10-24, ADR: [0012](../decisions/0012-frontend-design-system-and-theming.md))  
+**Scope:** `apps/web`, `apps/admin`, shared component primitives  
 **Document type:** Design System and UI Component Specification  
 
 > This document is the single source of truth for ASN's visual identity, token architecture, typography hierarchy, component contracts, RTL layout rules, and accessibility standards. It governs all client implementations in `apps/web` and `apps/admin`. Any modification to tokens or component interfaces must be recorded here.
@@ -44,13 +44,13 @@ The following architectural decisions govern all UI engineering across ASN clien
 
 1. **Token-Driven Multi-Theme Architecture:** The platform does not enforce a single immutable visual style. The UI layer separates geometric structure from surface tokens using CSS Custom Properties (`--bg-base`, `--primary`, `--radius-card`). The user selects their preferred surface density, primary accent, and corner curvature without layout changes.
 2. **Three Surface Modes:** `oled` (Pure Black `#000000`), `dim` (Slate Midnight `#0f172a`), and `light` (Clean Pearl `#f8fafc`).
-3. **Five Curated Accent Palettes:** Emerald (Tech/Privacy `#10b981`), Royal Indigo (`#6366f1`), Desert Amber (`#f59e0b`), Crimson Rose (`#f43f5e`), and Oasis Cyan (`#06b6d4`).
+3. **Five Curated Accent Palettes:** Emerald (Tech/Privacy `#10b981`), Royal Indigo (`#4f46e5`), Desert Amber (`#f59e0b`), Crimson Rose (`#e11d48`), and Oasis Cyan (`#06b6d4`).
 4. **Universal Accessibility (Triple-Signal Standard):** In compliance with WCAG 2.1 AA, no functional status relies on color alone. Every semantic feedback state combines **Color + Explicit Icon + Human-Readable Text Label**. The system is fully distinguishable under Protanopia, Deuteranopia, Tritanopia, and complete Monochromacy.
-5. **Fixed Semantic Isolation:** Functional status tokens (`--status-success`, `--status-destructive`, `--status-warning`, `--status-info`) remain immutable regardless of which primary brand accent is selected. Destructive actions use Deep Crimson (`#dc2626`) paired with a trash icon and mandatory confirmation modal to prevent overlap with brand accents.
+5. **Fixed Semantic Isolation:** Functional status tokens (`--status-success`, `--status-destructive`, `--status-warning`, `--status-info`) remain immutable regardless of which primary brand accent is selected. Destructive actions use Deep Crimson (`#dc2626` dark / `#b91c1c` light) paired with a trash icon and mandatory confirmation modal to prevent overlap with brand accents.
 6. **Bilingual Typography Harmony:** Primary typeface is **`IBM Plex Sans Arabic`**, paired natively with **`IBM Plex Sans`** for Latin glyphs to ensure consistent x-height and stroke weight in mixed Arabic/English sentences.
 7. **Monospace Precision:** Timestamps, cryptographic IDs, UUIDv7 representations, and code snippets strictly use **`JetBrains Mono`** or **`Geist Mono`**.
 8. **Arabic Vertical Rhythm (Line-Height Rule):** Arabic body text requires a relaxed line-height of `1.65` to `1.75` to accommodate Arabic diacritics, ascenders, and descenders without clipping or vertical cramping.
-9. **Strict 4px Base Grid:** All dimensions, margins, paddings, and gaps derive strictly from multiples of 4px (`4, 8, 12, 16, 20, 24, 32, 48, 64px`). Arbitrary values (e.g. 13px, 17px) are rejected by CI lint rules.
+9. **Strict 4px Base Grid:** All dimensions, margins, paddings, and gaps derive strictly from multiples of 4px (`4, 8, 12, 16, 20, 24, 32, 48, 64px`). Arbitrary values (e.g. 13px, 17px) are discouraged in favor of standard tokens.
 10. **Default Balanced Geometry:** The out-of-the-box corner radius is **12px** (`rounded-xl`) for cards, **8px** (`rounded-lg`) for buttons/inputs, and `9999px` (`rounded-full`) for pills and avatars.
 11. **Tonal Elevation over Drop Shadows:** Dark mode interfaces achieve spatial hierarchy via progressive luminance (`Level 0` `#09090b` → `Level 1` `#18181b` + 1px hairline border → `Level 2` `#27272a` → `Level 3` `#3f3f46` overlay) rather than black drop shadows.
 12. **RTL-First Logical Properties:** Hardcoded physical directions (`ml-`, `mr-`, `pl-`, `pr-`, `left`, `right`) are strictly banned. All spatial rules use CSS Logical Properties (`ms-`, `me-`, `ps-`, `pe-`, `text-start`, `text-end`).
@@ -66,14 +66,14 @@ ASN is engineered for the entire Arab world—encompassing developers, community
 
 ```mermaid
 flowchart LR
-  subgraph ThemeEngine[ASN Dynamic Theme Engine]
-    SURFACE[Surface Base Mode<br/>OLED Black / Dim Slate / Clean Light]
-    ACCENT[Primary Accent<br/>Emerald / Indigo / Amber / Crimson / Cyan]
-    RADIUS[Corner Radius<br/>Sharp 6px / Balanced 12px / Soft 20px]
+  subgraph ThemeEngine["ASN Dynamic Theme Engine"]
+    SURFACE["Surface Base Mode<br/>OLED Black / Dim Slate / Clean Light"]
+    ACCENT["Primary Accent<br/>Emerald / Indigo / Amber / Crimson / Cyan"]
+    RADIUS["Corner Radius<br/>Sharp 6px / Balanced 12px / Soft 20px"]
   end
 
-  ThemeEngine --> CSSVARS[CSS Custom Properties<br/>:root reactive tokens]
-  CSSVARS --> UI[All UI Components<br/>apps/web & apps/admin]
+  ThemeEngine --> CSSVARS["CSS Custom Properties<br/>:root reactive tokens"]
+  CSSVARS --> UI["All UI Components<br/>apps/web & apps/admin"]
 ```
 
 ### 1.1 Surface Modes
@@ -82,16 +82,16 @@ flowchart LR
 |---|---|---|---|---|---|
 | **OLED Black** | `#000000` | `#121215` | `#1f1f23` | `#27272a` | Pure battery saving, technical feel, night reading |
 | **Dim Slate** | `#0f172a` | `#1e293b` | `#334155` | `#334155` | Balanced social browsing, reduced eye strain |
-| **Clean Light** | `#f8fafc` | `#ffffff` | `#f1f5f9` | `#e2e8f0` | Daylight reading, editorial long-form articles |
+| **Clean Light** | `#f8fafc` | `#ffffff` | `#e2e8f0` | `#e2e8f0` | Daylight reading, editorial long-form articles |
 
 ### 1.2 Accent Palettes
 
 | Accent Key | Hex Primary | Hex Hover | Surface Tint (10%) | Atmosphere |
 |---|---|---|---|---|
 | `emerald` (Default) | `#10b981` | `#059669` | `rgba(16, 185, 129, 0.10)` | Privacy, security, decentralized networks |
-| `indigo` | `#6366f1` | `#4f46e5` | `rgba(99, 102, 241, 0.10)` | Modern social communication, sleek tech |
+| `indigo` | `#4f46e5` | `#4338ca` | `rgba(79, 70, 229, 0.10)` | Modern social communication, sleek tech |
 | `amber` | `#f59e0b` | `#d97706` | `rgba(245, 158, 11, 0.10)` | Desert gold, warmth, Arabian heritage |
-| `crimson` | `#f43f5e` | `#e11d48` | `rgba(244, 63, 94, 0.10)` | Dynamic community interaction, expressive |
+| `crimson` | `#e11d48` | `#be123c` | `rgba(225, 29, 72, 0.10)` | Dynamic community interaction, expressive |
 | `cyan` | `#06b6d4` | `#0891b2` | `rgba(6, 182, 212, 0.10)` | Fresh, vibrant, oasis modernism |
 
 ---
@@ -105,9 +105,19 @@ Semantic status tokens are isolated from user-selected accents to ensure critica
 | Token | Light Value | Dark Value | Icon | Functional Application |
 |---|---|---|---|---|
 | `--status-success` | `#059669` | `#10b981` | `✓✓` / `●` | Message read receipts, online presence, successful mutations |
-| `--status-destructive` | `#dc2626` | `#ef4444` | `🗑️` / `✕` | Hard account deletion, post removal, user bans, strike issuance |
+| `--status-destructive` | `#b91c1c` | `#dc2626` | `🗑️` / `✕` | Hard account deletion, post removal, user bans, strike issuance |
 | `--status-warning` | `#d97706` | `#f59e0b` | `⚠️` / `⏳` | WebSocket reconnecting banner, 30-day deletion grace period |
-| `--status-info` | `#0284c7` | `#0ea5e9` | `🔒` / `ℹ` | E2EE `dev-opaque-v1` security badges, system updates |
+| `--status-info` | `#0284c7` | `#0ea5e9` | `🔒` / `ℹ️` | E2EE `dev-opaque-v1` security badges, system updates |
+
+To guarantee WCAG 2.1 AA compliance (>= 4.5:1 text contrast) across all surface themes, dedicated semantic foreground tokens govern textual elements:
+
+| Token | Light Foreground | Dark / Dim Foreground | Target Contrast (on card/surface) |
+|---|---|---|---|
+| `--status-success-foreground` | `#065f46` | `#34d399` | >= 7.0:1 |
+| `--status-destructive-foreground` | `#991b1b` | `#fca5a5` | >= 7.5:1 |
+| `--status-warning-foreground` | `#92400e` | `#fbbf24` | >= 8.0:1 |
+| `--status-info-foreground` | `#075985` | `#38bdf8` | >= 7.5:1 |
+| `--primary-text` | `#047857` (emerald) | `#10b981` (emerald) | >= 4.8:1 |
 
 ### 2.2 Typography Architecture and Scale
 
@@ -152,10 +162,10 @@ Semantic status tokens are isolated from user-selected accents to ensure critica
 ### 2.5 Tonal Elevation and Depth Layers
 
 ```
-[Level 3: Modals, Drawers & Lightbox]   --> --elevation-3 (#3f3f46 / Light #ffffff shadow-2xl)
-      [Level 2: Dropdowns, Menus & Tooltips]  --> --elevation-2 (#27272a / Light #f1f5f9 shadow-md)
-            [Level 1: Cards, Feeds & Inputs]        --> --elevation-1 (#18181b / Light #ffffff 1px border)
-                  [Level 0: Page Background Canvas]       --> --elevation-0 (#09090b / Light #f8fafc)
+[Level 3: Modals, Drawers & Lightbox]   --> --bg-overlay (#3f3f46 / Light #ffffff shadow-2xl)
+      [Level 2: Dropdowns, Menus & Tooltips]  --> --bg-elevated (#27272a / Light #e2e8f0 shadow-md)
+            [Level 1: Cards, Feeds & Inputs]        --> --bg-card (#18181b / Light #ffffff 1px border)
+                  [Level 0: Page Background Canvas]       --> --bg-base (#09090b / Light #f8fafc)
 ```
 
 ---
@@ -184,7 +194,7 @@ All primitives reside in `apps/web/src/components/ui/` and wrap headless Radix U
 |---|---|
 | **RTL Alignment** | Defaults to `text-start` with placeholder aligned to start margin |
 | **Start/End Slots** | Dedicated containers for icons (search loupe, password toggle) with `ps-10` / `pe-10` |
-| **Error State** | Sets border to `--status-destructive`, displays error icon `⚠️` and Zod message below |
+| **Error State** | Sets border to `--status-destructive`, displays error icon `⚠️` and Zod message below via `--status-destructive-foreground` |
 | **Character Counter** | Optional floating badge anchored to `bottom-2 end-3` formatted via Monospace |
 
 ### 3.3 `Avatar` and Presence
@@ -199,7 +209,7 @@ All primitives reside in `apps/web/src/components/ui/` and wrap headless Radix U
 | `lg` | 56x56px | 14x14px border-2 |
 | `xl` | 80x80px | 18x18px border-3 |
 
-* **Presence States:** `online` (Emerald green dot + `aria-label="Online"`), `offline` (Neutral ring), `away` (Amber ring).
+* **Presence States:** `online` (Emerald green dot + `aria-label="Online"` + visible textual indicator in metadata), `offline` (Neutral ring), `away` (Amber ring).
 
 ### 3.4 `Badge`
 
@@ -239,14 +249,14 @@ Located in `apps/web/src/features/` or `src/components/domain/`.
 
 ```mermaid
 flowchart TD
-  PC[PostCard Container] --> HEADER[Author Avatar + Name + Timestamp + Context Menu]
-  PC --> CONTENT[Markdown Body Text with URL & Hashtag Highlighting]
-  PC --> MEDIA{Media Count?}
-  MEDIA -->|1 Image| M1[Full-width 16:9 or auto-aspect with max-h-96]
-  MEDIA -->|2 Images| M2[2-Column Grid 50/50 split]
-  MEDIA -->|3 Images| M3[1 Primary Column + 2 Stacked Column]
-  MEDIA -->|4 Images| M4[2x2 Uniform Grid]
-  PC --> ACTIONS[Action Bar: Like + Comment + Repost + Bookmark]
+  PC["PostCard Container"] --> HEADER["Author Avatar + Name + Timestamp + Context Menu"]
+  PC --> CONTENT["Markdown Body Text with URL & Hashtag Highlighting"]
+  PC --> MEDIA{"Media Count?"}
+  MEDIA -->|1 Image| M1["Full-width 16:9 or auto-aspect with max-h-96"]
+  MEDIA -->|2 Images| M2["2-Column Grid 50/50 split"]
+  MEDIA -->|3 Images| M3["1 Primary Column + 2 Stacked Column"]
+  MEDIA -->|4 Images| M4["2x2 Uniform Grid"]
+  PC --> ACTIONS["Action Bar: Like + Comment + Repost + Bookmark"]
 ```
 
 * **BlurHash Guarantee:** Every image container renders an animated CSS blurhash gradient until the underlying Cloudflare R2 image payload triggers `onLoad`.
@@ -315,7 +325,7 @@ flowchart TD
 
 ### 5.2 Accessibility Checklist (WCAG 2.1 AA)
 
-- [x] **Contrast Ratio:** Minimum 4.5:1 for body text; minimum 3:0:1 for large display titles and interactive boundaries.
+- [x] **Contrast Ratio:** Minimum 4.5:1 for body text; minimum 3.0:1 for large display titles and interactive boundaries / focus rings.
 - [x] **Triple-Signal Redundancy:** Every status (Error, Success, Warning, Info) pairs color with an icon and textual equivalent.
 - [x] **Focus Visibility:** Interactive elements show a dual-ring focus state (`focus-visible:ring-2 focus-visible:ring-offset-2`).
 - [x] **Screen Reader Labels:** Icon-only buttons contain an explicit `aria-label` attribute (e.g. `aria-label="إغلاق النافذة"`).
@@ -332,7 +342,7 @@ To ensure clean dependency resolution without circular imports:
 3. **Core Primitives:**
    - `Button` and `Badge`
    - `Input` and `Textarea`
-   - `Avatar` with Presence dot
+   - `Avatar` with Presence dot and visible label
 4. **Overlay Primitives:**
    - `Dialog` (Modal) and `DropdownMenu`
    - `Sheet` (Mobile drawer with RTL slide)
@@ -356,25 +366,38 @@ To ensure clean dependency resolution without circular imports:
   --bg-elevated: #27272a;
   --bg-overlay: #3f3f46;
 
-  /* Text & Foreground */
+  /* Typography Colors - WCAG AA compliant */
   --text-main: #f4f4f5;
   --text-muted: #a1a1aa;
-  --text-dim: #71717a;
+  --text-dim: #9ca3af;
 
   /* Borders & Hairlines */
   --border: #27272a;
   --border-subtle: #1f1f23;
 
   /* Active Brand Accent (Configurable) */
+  --primary-rgb: 16 185 129;
   --primary: #10b981;
   --primary-hover: #059669;
-  --primary-surface: rgba(16, 185, 129, 0.10);
+  --primary-foreground: #011910;
+  --primary-text: #10b981;
 
   /* Immutable Semantic Status Tokens */
+  --status-success-rgb: 16 185 129;
   --status-success: #10b981;
+  --status-success-foreground: #34d399;
+
+  --status-destructive-rgb: 220 38 38;
   --status-destructive: #dc2626;
+  --status-destructive-foreground: #fca5a5;
+
+  --status-warning-rgb: 245 158 11;
   --status-warning: #f59e0b;
+  --status-warning-foreground: #fbbf24;
+
+  --status-info-rgb: 14 165 233;
   --status-info: #0ea5e9;
+  --status-info-foreground: #38bdf8;
 
   /* Geometry & Grid */
   --radius-card: 12px;
@@ -385,5 +408,35 @@ To ensure clean dependency resolution without circular imports:
   --font-sans: 'IBM Plex Sans Arabic', 'IBM Plex Sans', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
   --leading-body: 1.65;
+}
+
+/* Light Theme Overrides */
+[data-theme="light"] {
+  --bg-base: #f8fafc;
+  --bg-surface: #f1f5f9;
+  --bg-card: #ffffff;
+  --bg-elevated: #e2e8f0;
+  --border: #e2e8f0;
+  --border-subtle: #f1f5f9;
+  --text-main: #0f172a;
+  --text-muted: #334155;
+  --text-dim: #475569;
+
+  --status-success-rgb: 5 150 105;
+  --status-success: #059669;
+  --status-success-foreground: #065f46;
+
+  --status-destructive-rgb: 185 28 28;
+  --status-destructive: #b91c1c;
+  --status-destructive-foreground: #991b1b;
+
+  --status-warning-rgb: 217 119 6;
+  --status-warning: #d97706;
+  --status-warning-foreground: #92400e;
+
+  --status-info-rgb: 2 132 199;
+  --status-info: #0284c7;
+  --status-info-foreground: #075985;
+  --primary-text: #047857;
 }
 ```

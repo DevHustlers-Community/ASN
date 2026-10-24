@@ -1,5 +1,7 @@
 # Posts & Content Feature (`src/features/posts`)
 
+**Status:** planned — no implementation yet.
+
 Owns post creation, post cards, media galleries, and long-form articles.
 
 ## Core Components

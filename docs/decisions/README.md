@@ -35,6 +35,7 @@ Every significant, hard-to-reverse decision gets one numbered ADR.
 | ID | Subject | Status |
 |---|---|---|
 | [0011](0011-elixir-and-postgres-baseline.md) | Elixir and PostgreSQL baseline | accepted |
+| [0012](0012-frontend-design-system-and-theming.md) | Frontend design system and theming | proposed |
 
 **Planned ADRs:**
 
@@ -51,5 +52,6 @@ Every significant, hard-to-reverse decision gets one numbered ADR.
 | 0009 | Opaque envelope contract from day one |
 | 0010 | Web E2EE parity policy |
 
-**Status:** 0011 is accepted. 0001-0006 are effectively settled by the
+**Status:** 0011 is accepted. 0012 is proposed. 0001-0006 are effectively settled by the
 architecture document and should be recorded next. 0007-0010 remain open.
+

@@ -1,3 +1,9 @@
-# Shared Hooks (src/hooks)
+# Shared Hooks (`src/hooks`)
 
-Global reusable React hooks: useTheme, useDebounce, useMediaQuery, useIntersectionObserver.
+**Status:** planned — no custom shared hooks implemented yet.
+
+Planned cross-feature React hooks:
+- `useTheme`: reactive theme and accent state management.
+- `useDebounce`: input debouncing for search and autocomplete.
+- `useMediaQuery`: responsive breakpoint detection.
+- `useIntersectionObserver`: infinite feed scroll and viewport triggers.
