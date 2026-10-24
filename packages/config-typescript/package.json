@@ -1,0 +1,11 @@
+{
+  "name": "@asn/config-typescript",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shared TypeScript configurations for ASN monorepo",
+  "files": [
+    "base.json",
+    "react.json",
+    "bun.json"
+  ]
+}

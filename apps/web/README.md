@@ -1,34 +1,61 @@
-# Web app
+# ASN Web Client (`@asn/web`)
 
-Public-facing React + TypeScript client.
+Public-facing React + TypeScript web client for the Arabian Social Network (ASN) / تواصل.
 
-**Owns:** browser UI state and non-sensitive client cache only.
+## 1. Overview & Architectural Boundaries
 
-**Planned layout (`src/`):**
+- **Runtime & Bundler:** React 18, TypeScript, Vite.
+- **Styling & Design System:** Tailwind CSS, Radix UI Primitives, CSS Custom Properties (Multi-theme engine).
+- **Fonts:** 100% Offline Local Fonts (`IBM Plex Sans Arabic` + `JetBrains Mono`) stored in `public/fonts/`. No external CDN dependencies.
+- **State & Data Fetching:** TanStack Query (Server Cache, Cursor Pagination) + Zustand (UI & Session State).
+- **Real-Time Delivery:** Phoenix Channels client over WebSockets for live chat, presence, and receipts.
+- **Security & E2EE:** Server stores and transmits opaque binary envelopes (`dev-opaque-v1`); the browser client never transmits plaintext message bodies.
 
-| Path | Purpose |
-|---|---|
-| `app/` | Routing, providers, layouts |
-| `features/` | One folder per product area: auth, feed, posts, comments, reactions, profiles, relationships, communities, search, hashtags, notifications, chat, settings |
-| `components/ui/` | Reusable web-only UI primitives |
-| `lib/api/` | REST client wrapping generated types |
-| `lib/websocket/` | Phoenix Channels client for live chat delivery |
-| `lib/auth/` | Session handling; tokens never go to logs or analytics |
-| `hooks/` | Cross-feature React hooks |
+## 2. Directory Layout (`src/`)
 
-**Boundaries:**
+```
+src/
+├── app/                  # Application routing, global providers, and layout shells
+├── features/             # Domain modules (Feature-Driven Architecture)
+│   ├── auth/             # Login, signup, Auth0 session handling
+│   ├── feed/             # Home timeline, cursor pagination, feed filters
+│   ├── posts/            # Post creation, media grid (1-4 images), long-form articles
+│   ├── comments/         # Nested comment trees with interactive thread lines
+│   ├── reactions/        # Optimistic likes, reposts, bookmarks
+│   ├── profiles/         # User profiles, avatar customization, stats
+│   ├── relationships/    # Follow, unfollow, block, friendships
+│   ├── communities/      # Communities, channels, role management
+│   ├── search/           # Full-text debounced search
+│   ├── hashtags/         # Trending tags, hashtag timelines
+│   ├── notifications/    # Notification stream, live badges
+│   ├── chat/             # E2EE chat, 4px message grouping, receipts
+│   └── settings/         # Theme customizer, privacy, account deletion
+├── components/ui/        # Reusable headless UI primitives (Button, Input, Avatar, Dialog, etc.)
+├── lib/
+│   ├── api/              # Typed REST client wrapping generated contracts
+│   ├── websocket/        # Phoenix Channels WebSocket client
+│   ├── auth/             # Session persistence and token management
+│   └── utils.ts          # Classnames merger (`cn`)
+├── hooks/                # Cross-feature React hooks
+├── styles/               # Design tokens, fonts, and global Tailwind layer
+└── assets/               # Local static assets and brand logo
+```
 
-- Consumes REST under `/api/v1/` and the Chat WebSocket channel.
-- Does not read another service's database, hold service credentials, or decide
-  visibility/authorization on its own.
-- Chat envelopes are opaque handles; the browser never sends plaintext message
-  bodies to Chat. Web E2EE parity is an open ADR decision (see
-  [open decisions §9](../../docs/architecture/architecture-and-schema.md)).
+## 3. Local Development
 
-**Local development:** `bun install` / `bun run dev` once the app is scaffolded
-with the chosen bundler. Keep environment variables in `.env.example` only.
+```bash
+# Install dependencies (from root or apps/web)
+npm install
 
-**Tests:** unit and component tests next to the feature; end-to-end flows live in
-[`tests/end-to-end`](../../tests/README.md).
+# Start Vite dev server on port 3000
+npm run dev
 
-**Status:** not scaffolded yet.
+# Typecheck and build for production
+npm run build
+```
+
+## 4. Key Rules
+
+1. **RTL First:** All spacing and positioning use CSS Logical Properties (`ms-*`, `me-*`, `ps-*`, `pe-*`, `start-*`, `end-*`). Never use physical classes (`ml-*`, `mr-*`, `left-*`).
+2. **Accessible by Default:** Adhere to WCAG 2.1 AA. Never rely on color alone—pair status with icons and text.
+3. **No Direct Secret Storage:** Tokens are kept in memory/secure context; never write authentication tokens to `console.log` or analytics.
