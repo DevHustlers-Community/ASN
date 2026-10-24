@@ -1,14 +1,19 @@
 # @asn/config-typescript
 
-Shared TypeScript configuration presets.
+Shared TypeScript configuration presets for the ASN monorepo.
 
-- `base.json` - strict baseline for every TypeScript package.
-- `react.json` - web and admin apps.
-- `react-native.json` - mobile app.
-- `bun.json` - Bun services.
+## Available Presets
 
-Enable `strict`, `noUncheckedIndexedAccess`, and `exactOptionalPropertyTypes`
-unless a package documents an exception. Path aliases are package-local; no
-cross-package source imports.
+- `base.json` — Strict baseline for every TypeScript package (`strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`).
+- `react.json` — Configuration for React web applications (used by `apps/web`), with JSX preserve/react-jsx and DOM libraries.
+- `bun.json` — Configuration preset for Bun-based services and scripts with Bun types.
 
-**Status:** not written yet; created with the first TypeScript package.
+## Planned Presets
+
+- `react-native.json` — Configuration preset for the mobile application.
+
+## Conventions
+
+Path aliases remain package-local (for example, `@/*` mapping to `./src/*` within `apps/web`). There are no cross-package source imports without explicit workspace package dependencies.
+
+**Status:** `base.json`, `react.json`, and `bun.json` are implemented and active. `react-native.json` is planned.

@@ -1,7 +1,7 @@
 # Local environment
 
 The local stack is intentionally small: one PostgreSQL 18.6 container plus the
-Elixir services you choose to run on the host.
+services and web client you choose to run on the host.
 
 ## Versions
 
@@ -9,6 +9,7 @@ Elixir services you choose to run on the host.
 |---|---|---|
 | Erlang / OTP | 29.1.2 | [`.tool-versions`](../../.tool-versions) |
 | Elixir | 1.20.4-otp-29 | [`.tool-versions`](../../.tool-versions) |
+| Bun | 1.4.4 | [`.tool-versions`](../../.tool-versions) |
 | Phoenix | 1.8.16 | `services/chat-service/mix.lock` |
 | PostgreSQL | 18.6 | [`compose.yaml`](../../compose.yaml) |
 | Database image | `postgres:18.6-alpine3.24` | [`compose.yaml`](../../compose.yaml) |
@@ -25,7 +26,7 @@ drill before changing the baseline.
 | `4001` | Social API | Reserved; no manifest |
 | `4003` | Moderation API | Reserved; no manifest |
 | `4004` | Event broker HTTP | Reserved; only if ADR 0008 selects HTTP |
-| `3000` | Web | Reserved; no manifest |
+| `3000` | Web | Vite dev server (`apps/web`) |
 | `3001` | Admin | Reserved; no manifest |
 
 ## Databases and roles
@@ -48,77 +49,14 @@ Rules enforced locally:
 - `PUBLIC` has no `CONNECT` privilege on these databases. The Chat role cannot
   connect to `social_db`, for example.
 - The superuser is `postgres`, used only for administration and init.
-- The broker does not get access to business databases.
 
-The init script lives in
-[`infrastructure/postgres/init/01-create-databases.sh`](../../infrastructure/postgres/init/01-create-databases.sh).
-It runs only on an empty data volume.
+## Resetting local databases
 
-## Environment variables
-
-Copy the example file and edit local values:
+To reset the database containers and start fresh:
 
 ```bash
-cp .env.example .env
-```
-
-| Variable | Purpose |
-|---|---|
-| `POSTGRES_PASSWORD` | Local superuser password |
-| `ASN_DB_PASSWORD` | Password assigned to all local service roles |
-| `POSTGRES_PORT` | Host port for PostgreSQL, default `5432` |
-| `SOCIAL_DATABASE_URL` | Social API connection URL |
-| `CHAT_DATABASE_URL` | Chat service connection URL |
-| `MODERATION_DATABASE_URL` | Moderation API connection URL |
-| `BROKER_DATABASE_URL` | Event broker connection URL |
-| `CHAT_TEST_DATABASE_URL` | Chat test connection URL |
-| `BROKER_TEST_DATABASE_URL` | Broker test connection URL |
-| `CHAT_SERVICE_PORT` | Chat HTTP port, default `4002` |
-| `SECRET_KEY_BASE` | Chat signing secret; required in production |
-
-`.env` is ignored by Git. Do not put real credentials in `.env.example`, service
-config, tests, or documentation. If you change `ASN_DB_PASSWORD`, update the four
-service URLs and the two test URLs to match.
-
-## Compose lifecycle
-
-```bash
-# Start PostgreSQL
-docker compose up -d postgres
-
-# Status and health
-docker compose ps
-
-# Logs
-docker compose logs -f postgres
-
-# Stop without deleting data
-docker compose down
-
-# Destroy local data and re-run initialization
 docker compose down -v
 docker compose up -d postgres
 ```
 
-`docker compose down -v` deletes the `asn_postgres-data` volume. Treat it as a
-destructive reset. Initialization is not re-run on an existing volume.
-
-PostgreSQL 18 changed the image's default `PGDATA` to
-`/var/lib/postgresql/18/docker` and the declared volume to
-`/var/lib/postgresql`. The compose file mounts the named volume at
-`/var/lib/postgresql`; do not change it to the pre-18 `/var/lib/postgresql/data`
-path.
-
-## Manual inspection
-
-```bash
-docker compose exec postgres psql -U postgres -d postgres
-```
-
-From the host:
-
-```bash
-psql "postgres://asn_chat:change_me@localhost:5432/chat_db"
-```
-
-Use the service role only for its own database. Cross-database access must fail.
+This removes the persistent volume and reruns the init script on next start.
