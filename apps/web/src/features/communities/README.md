@@ -1,5 +1,7 @@
 # Communities Feature (`src/features/communities`)
 
+**Status:** planned — no implementation yet.
+
 Manages Arabian community spaces, channels, rules, and moderation.
 
 ## Scope & Capabilities

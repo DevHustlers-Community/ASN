@@ -1,5 +1,7 @@
 # Feed Feature (`src/features/feed`)
 
+**Status:** planned — no implementation yet.
+
 Manages the primary timeline feeds: Home (Following), Explore (For You), and Community feeds.
 
 ## Technical Details

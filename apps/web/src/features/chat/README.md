@@ -1,22 +1,21 @@
 # Real-time Chat Feature (`src/features/chat`)
 
-Client implementation for encrypted direct and community messaging.
+**Status:** planned — no implementation yet.
 
-## Non-Negotiable E2EE Rules
+Client implementation for direct and group messaging.
 
-1. **No Plaintext to Server:** All messages serialize into an opaque binary envelope (`dev-opaque-v1` in development). The server stores and routes bytes only.
-2. **Key Storage:** Private keys live in secure storage, never logged or exposed.
-3. **Attachments:** Uploads to Cloudflare R2 are encrypted client-side before transmission. Decryption keys travel inside the encrypted message payload.
+> **Note on E2EE & Web Key Storage:** Web E2EE parity and web cryptographic key storage are currently open architectural decisions (pending ADR 0010 and architecture §9). Plaintext messages never reach the server; development relies strictly on opaque binary envelopes (`dev-opaque-v1`).
 
-## UI Physics & Interactions
+## UI Physics & Message Delivery
 
 - **Consecutive Message Grouping (4px Gap):**
-  - Consecutive messages from the same sender within 60s share a `4px` gap (`space-y-1`).
-  - Avatar appears only on the terminal message.
-  - Adjacent bubble corners flatten.
-- **Message Receipts:**
-  - Sent: Single checkmark `✓`.
-  - Delivered: Double checkmark `✓✓` (gray).
-  - Read: Double checkmark `✓✓` (Emerald `#10b981`).
+  - Consecutive messages from the same sender within 60s share a `4px` vertical gap (`space-y-1`).
+  - Avatar appears only on the terminal message in the sequence.
+  - Adjacent bubble corners flatten (`rounded-br-sm` / `rounded-bl-sm`).
+- **Read Receipts:**
+  - In direct chats: per-message status (`✓` sent, `✓✓` delivered, `✓✓` read).
+  - In channels/group conversations: per-conversation `last_read_seq` cursor tracking per `architecture-and-schema.md` §3.11.
+- **Streaks:**
+  - Streaks (`chat_db.streaks`) are friendship-based direct messaging streaks, not community-wide streaks.
 - **Presence & Live Indicators:**
-  - Online/offline status and typing indicators powered by Phoenix Channels.
+  - Online/offline status and typing indicators delivered through Phoenix Channels WebSockets.

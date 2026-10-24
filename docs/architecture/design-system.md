@@ -1,7 +1,7 @@
-# ASN — Frontend Design System and Component Specification
+﻿# ASN — Frontend Design System and Component Specification
 
-**Status:** Approved — target design system and token specification  
-**Scope:** `apps/web`, `apps/admin`, `packages/tokens`, shared component primitives  
+**Status:** Proposed — target frontend design system and token specification (Owner: Web Client Team, Date: 2026-10-24, ADR: [0012](../decisions/0012-frontend-design-system-and-theming.md))  
+**Scope:** `apps/web`, `apps/admin`, shared component primitives  
 **Document type:** Design System and UI Component Specification  
 
 > This document is the single source of truth for ASN's visual identity, token architecture, typography hierarchy, component contracts, RTL layout rules, and accessibility standards. It governs all client implementations in `apps/web` and `apps/admin`. Any modification to tokens or component interfaces must be recorded here.
@@ -33,8 +33,8 @@
   - [4.4 `CommentThread` and Interactive Thread Lines](#44-commentthread-and-interactive-thread-lines)
   - [4.5 `StreakBadge` and Activity Indicators](#45-streakbadge-and-activity-indicators)
 - [5. RTL and Accessibility (a11y) Directives](#5-rtl-and-accessibility-a11y-directives)
-- [Appendix A — Component Implementation Order](#appendix-a--component-implementation-order)
-- [Appendix B — CSS Variables Reference (Tokens Cheatsheet)](#appendix-b--css-variables-reference-tokens-cheatsheet)
+- [Appendix A â€” Component Implementation Order](#appendix-a--component-implementation-order)
+- [Appendix B â€” CSS Variables Reference (Tokens Cheatsheet)](#appendix-b--css-variables-reference-tokens-cheatsheet)
 
 ---
 
@@ -46,15 +46,15 @@ The following architectural decisions govern all UI engineering across ASN clien
 2. **Three Surface Modes:** `oled` (Pure Black `#000000`), `dim` (Slate Midnight `#0f172a`), and `light` (Clean Pearl `#f8fafc`).
 3. **Five Curated Accent Palettes:** Emerald (Tech/Privacy `#10b981`), Royal Indigo (`#6366f1`), Desert Amber (`#f59e0b`), Crimson Rose (`#f43f5e`), and Oasis Cyan (`#06b6d4`).
 4. **Universal Accessibility (Triple-Signal Standard):** In compliance with WCAG 2.1 AA, no functional status relies on color alone. Every semantic feedback state combines **Color + Explicit Icon + Human-Readable Text Label**. The system is fully distinguishable under Protanopia, Deuteranopia, Tritanopia, and complete Monochromacy.
-5. **Fixed Semantic Isolation:** Functional status tokens (`--status-success`, `--status-destructive`, `--status-warning`, `--status-info`) remain immutable regardless of which primary brand accent is selected. Destructive actions use Deep Crimson (`#dc2626`) paired with a trash icon and mandatory confirmation modal to prevent overlap with brand accents.
+5. **Fixed Semantic Isolation:** Functional status tokens (`--status-success`, `--status-destructive`, `--status-warning`, `--status-info`) remain immutable regardless of which primary brand accent is selected. Destructive actions use Deep Crimson (`#ef4444 (dark) / #b91c1c (light)`) paired with a trash icon and mandatory confirmation modal to prevent overlap with brand accents.
 6. **Bilingual Typography Harmony:** Primary typeface is **`IBM Plex Sans Arabic`**, paired natively with **`IBM Plex Sans`** for Latin glyphs to ensure consistent x-height and stroke weight in mixed Arabic/English sentences.
 7. **Monospace Precision:** Timestamps, cryptographic IDs, UUIDv7 representations, and code snippets strictly use **`JetBrains Mono`** or **`Geist Mono`**.
 8. **Arabic Vertical Rhythm (Line-Height Rule):** Arabic body text requires a relaxed line-height of `1.65` to `1.75` to accommodate Arabic diacritics, ascenders, and descenders without clipping or vertical cramping.
 9. **Strict 4px Base Grid:** All dimensions, margins, paddings, and gaps derive strictly from multiples of 4px (`4, 8, 12, 16, 20, 24, 32, 48, 64px`). Arbitrary values (e.g. 13px, 17px) are rejected by CI lint rules.
 10. **Default Balanced Geometry:** The out-of-the-box corner radius is **12px** (`rounded-xl`) for cards, **8px** (`rounded-lg`) for buttons/inputs, and `9999px` (`rounded-full`) for pills and avatars.
-11. **Tonal Elevation over Drop Shadows:** Dark mode interfaces achieve spatial hierarchy via progressive luminance (`Level 0` `#09090b` → `Level 1` `#18181b` + 1px hairline border → `Level 2` `#27272a` → `Level 3` `#3f3f46` overlay) rather than black drop shadows.
+11. **Tonal Elevation over Drop Shadows:** Dark mode interfaces achieve spatial hierarchy via progressive luminance (`Level 0` `#09090b` â†’ `Level 1` `#18181b` + 1px hairline border â†’ `Level 2` `#27272a` â†’ `Level 3` `#3f3f46` overlay) rather than black drop shadows.
 12. **RTL-First Logical Properties:** Hardcoded physical directions (`ml-`, `mr-`, `pl-`, `pr-`, `left`, `right`) are strictly banned. All spatial rules use CSS Logical Properties (`ms-`, `me-`, `ps-`, `pe-`, `text-start`, `text-end`).
-13. **Adaptive Media Grid (1–4 Assets):** Post media galleries adapt dynamically: 1 asset (16:9 full-width), 2 assets (50/50 horizontal split), 3 assets (one primary + 2 stacked), 4 assets (2x2 equal grid), all fronted by animated **BlurHash placeholders** to guarantee zero Cumulative Layout Shift (CLS).
+13. **Adaptive Media Grid (1â€“4 Assets):** Post media galleries adapt dynamically: 1 asset (16:9 full-width), 2 assets (50/50 horizontal split), 3 assets (one primary + 2 stacked), 4 assets (2x2 equal grid), all fronted by animated **BlurHash placeholders** to guarantee zero Cumulative Layout Shift (CLS).
 14. **Consecutive Message Physics (4px Gap):** Consecutive chat messages from the same sender within a 60-second window group with an avatar rendered on the final message only, a **4px** vertical spacing gap, and flattened adjacent corners (`rounded-br-sm` / `rounded-bl-sm`).
 15. **Collapsible Comment Threads:** Nested comment hierarchies include a continuous vertical guide line (`Thread Line`) with a minimal pill button featuring a rotating chevron and a single-line collapsed preview bar.
 
@@ -62,7 +62,7 @@ The following architectural decisions govern all UI engineering across ASN clien
 
 ## 1. Visual Identity and Multi-Theme Architecture
 
-ASN is engineered for the entire Arab world—encompassing developers, community leaders, casual readers, and privacy advocates. The theming engine exposes three independent axes of personalization:
+ASN is engineered for the entire Arab worldâ€”encompassing developers, community leaders, casual readers, and privacy advocates. The theming engine exposes three independent axes of personalization:
 
 ```mermaid
 flowchart LR
@@ -104,10 +104,10 @@ Semantic status tokens are isolated from user-selected accents to ensure critica
 
 | Token | Light Value | Dark Value | Icon | Functional Application |
 |---|---|---|---|---|
-| `--status-success` | `#059669` | `#10b981` | `✓✓` / `●` | Message read receipts, online presence, successful mutations |
-| `--status-destructive` | `#dc2626` | `#ef4444` | `🗑️` / `✕` | Hard account deletion, post removal, user bans, strike issuance |
-| `--status-warning` | `#d97706` | `#f59e0b` | `⚠️` / `⏳` | WebSocket reconnecting banner, 30-day deletion grace period |
-| `--status-info` | `#0284c7` | `#0ea5e9` | `🔒` / `ℹ` | E2EE `dev-opaque-v1` security badges, system updates |
+| `--status-success` | `#059669` | `#10b981` | `âœ“âœ“` / `â—` | Message read receipts, online presence, successful mutations |
+| `--status-destructive` | `#ef4444 (dark) / #b91c1c (light)` | `#ef4444` | `ðŸ—‘ï¸` / `âœ•` | Hard account deletion, post removal, user bans, strike issuance |
+| `--status-warning` | `#d97706` | `#f59e0b` | `âš ï¸` / `â³` | WebSocket reconnecting banner, 30-day deletion grace period |
+| `--status-info` | `#0284c7` | `#0ea5e9` | `ðŸ”’` / `â„¹` | E2EE `dev-opaque-v1` security badges, system updates |
 
 ### 2.2 Typography Architecture and Scale
 
@@ -184,7 +184,7 @@ All primitives reside in `apps/web/src/components/ui/` and wrap headless Radix U
 |---|---|
 | **RTL Alignment** | Defaults to `text-start` with placeholder aligned to start margin |
 | **Start/End Slots** | Dedicated containers for icons (search loupe, password toggle) with `ps-10` / `pe-10` |
-| **Error State** | Sets border to `--status-destructive`, displays error icon `⚠️` and Zod message below |
+| **Error State** | Sets border to `--status-destructive`, displays error icon `âš ï¸` and Zod message below |
 | **Character Counter** | Optional floating badge anchored to `bottom-2 end-3` formatted via Monospace |
 
 ### 3.3 `Avatar` and Presence
@@ -256,9 +256,9 @@ flowchart TD
 
 * **File:** `src/features/posts/components/article-card.tsx`
 * **Attributes:**
-  - Badge: `📖 مقال مطول · Article` with estimated reading time.
+  - Badge: `ðŸ“– Ù…Ù‚Ø§Ù„ Ù…Ø·ÙˆÙ„ Â· Article` with estimated reading time.
   - Layout: Headline (bold, 18px), two-line excerpt clamped via `line-clamp-2`, and right-aligned 16:9 cover thumbnail (128x80px).
-  - Explicit CTA: `قراءة المقال بالكامل ←` linking to the dedicated Reader view.
+  - Explicit CTA: `Ù‚Ø±Ø§Ø¡Ø© Ø§Ù„Ù…Ù‚Ø§Ù„ Ø¨Ø§Ù„ÙƒØ§Ù…Ù„ â†` linking to the dedicated Reader view.
 
 ### 4.3 `ChatBubble` and Consecutive Message Grouping
 
@@ -275,10 +275,10 @@ flowchart TD
   2. The avatar renders **only at the terminal (bottom) message** of the sequence.
   3. The intermediate corners flatten to create an integrated bubble cluster.
   4. Outgoing messages display real-time receipt indicators:
-     - Sent: Single check `✓`
-     - Delivered: Double check `✓✓` (gray)
-     - Read: Double check `✓✓` (Emerald green `#10b981`)
-  5. E2EE Status: Encrypted conversations display the pill badge `🔒 dev-opaque-v1` linking to public key verification.
+     - Sent: Single check `âœ“`
+     - Delivered: Double check `âœ“âœ“` (gray)
+     - Read: Double check `âœ“âœ“` (Emerald green `#10b981`)
+  5. E2EE Status: Encrypted conversations display the pill badge `ðŸ”’ dev-opaque-v1` linking to public key verification.
 
 ### 4.4 `CommentThread` and Interactive Thread Lines
 
@@ -286,15 +286,15 @@ flowchart TD
 * **Structure:**
   - Continuous 2px vertical guide line spanning all descendant replies.
   - Hovering over the guide line highlights it in Emerald green.
-  - Collapse Header: Pill button with rotating chevron (`ChevronDown` SVG) and label `طي الردود`.
+  - Collapse Header: Pill button with rotating chevron (`ChevronDown` SVG) and label `Ø·ÙŠ Ø§Ù„Ø±Ø¯ÙˆØ¯`.
   - Collapsed State: Compresses the entire branch into a single-line bar:
-    `💬 خيط نقاش مطوي (رد واحد من فريق ASN) · انقر لتوسيع الردود ▾`
+    `ðŸ’¬ Ø®ÙŠØ· Ù†Ù‚Ø§Ø´ Ù…Ø·ÙˆÙŠ (Ø±Ø¯ ÙˆØ§Ø­Ø¯ Ù…Ù† ÙØ±ÙŠÙ‚ ASN) Â· Ø§Ù†Ù‚Ø± Ù„ØªÙˆØ³ÙŠØ¹ Ø§Ù„Ø±Ø¯ÙˆØ¯ â–¾`
 
 ### 4.5 `StreakBadge` and Activity Indicators
 
 * **File:** `src/features/feed/components/streak-badge.tsx`
 * **Purpose:** Represents chat and community daily engagement streaks (defined in `chat_db.streaks`).
-* **Visual:** Flame icon `🔥` with active streak counter, styled in Desert Amber (`#f59e0b`).
+* **Visual:** Flame icon `ðŸ”¥` with active streak counter, styled in Desert Amber (`#f59e0b`).
 
 ---
 
@@ -318,12 +318,12 @@ flowchart TD
 - [x] **Contrast Ratio:** Minimum 4.5:1 for body text; minimum 3:0:1 for large display titles and interactive boundaries.
 - [x] **Triple-Signal Redundancy:** Every status (Error, Success, Warning, Info) pairs color with an icon and textual equivalent.
 - [x] **Focus Visibility:** Interactive elements show a dual-ring focus state (`focus-visible:ring-2 focus-visible:ring-offset-2`).
-- [x] **Screen Reader Labels:** Icon-only buttons contain an explicit `aria-label` attribute (e.g. `aria-label="إغلاق النافذة"`).
+- [x] **Screen Reader Labels:** Icon-only buttons contain an explicit `aria-label` attribute (e.g. `aria-label="Ø¥ØºÙ„Ø§Ù‚ Ø§Ù„Ù†Ø§ÙØ°Ø©"`).
 - [x] **Semantic Landmarks:** Native HTML5 tags (`<main>`, `<nav>`, `<header>`, `<article>`, `<section>`) define structural hierarchy.
 
 ---
 
-## Appendix A — Component Implementation Order
+## Appendix A â€” Component Implementation Order
 
 To ensure clean dependency resolution without circular imports:
 
@@ -338,14 +338,14 @@ To ensure clean dependency resolution without circular imports:
    - `Sheet` (Mobile drawer with RTL slide)
 5. **Domain Components:**
    - `ChatBubble` (incorporating 4px consecutive grouping and read receipts)
-   - `PostCard` (incorporating 1–4 Adaptive Media Grid and BlurHash)
+   - `PostCard` (incorporating 1â€“4 Adaptive Media Grid and BlurHash)
    - `CommentThread` (incorporating Thread Line and Collapsible chevron banner)
    - `ArticleCard` snippet
 6. **Theme Switcher Studio:** Construct user preferences panel for live theme switching.
 
 ---
 
-## Appendix B — CSS Variables Reference (Tokens Cheatsheet)
+## Appendix B â€” CSS Variables Reference (Tokens Cheatsheet)
 
 ```css
 :root {
@@ -372,7 +372,7 @@ To ensure clean dependency resolution without circular imports:
 
   /* Immutable Semantic Status Tokens */
   --status-success: #10b981;
-  --status-destructive: #dc2626;
+  --status-destructive: #ef4444 (dark) / #b91c1c (light);
   --status-warning: #f59e0b;
   --status-info: #0ea5e9;
 

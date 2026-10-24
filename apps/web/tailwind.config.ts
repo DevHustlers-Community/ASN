@@ -24,16 +24,15 @@ const config: Config = {
         border: 'var(--border)',
         'border-subtle': 'var(--border-subtle)',
         primary: {
-          DEFAULT: 'var(--primary)',
+          DEFAULT: 'rgb(var(--primary-rgb) / <alpha-value>)',
           hover: 'var(--primary-hover)',
-          surface: 'var(--primary-surface)',
-          foreground: '#ffffff',
+          foreground: 'var(--primary-foreground)',
         },
         status: {
-          success: 'var(--status-success)',
-          destructive: 'var(--status-destructive)',
-          warning: 'var(--status-warning)',
-          info: 'var(--status-info)',
+          success: 'rgb(var(--status-success-rgb) / <alpha-value>)',
+          destructive: 'rgb(var(--status-destructive-rgb) / <alpha-value>)',
+          warning: 'rgb(var(--status-warning-rgb) / <alpha-value>)',
+          info: 'rgb(var(--status-info-rgb) / <alpha-value>)',
         },
         text: {
           main: 'var(--text-main)',

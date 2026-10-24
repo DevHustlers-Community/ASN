@@ -59,7 +59,3 @@ logs/
 # Python
 __pycache__/
 *.pyc
-
-# Local workspace archives
-_legacy_archive/
-ASN-Design-System.md

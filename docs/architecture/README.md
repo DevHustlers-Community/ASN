@@ -3,13 +3,14 @@
 | Document | Status |
 |---|---|
 | [`architecture-and-schema.md`](architecture-and-schema.md) | Target architecture and schema |
+| [`design-system.md`](design-system.md) | Target frontend design system and tokens (proposed) |
 
 **Reading order for new contributors:**
 
 1. Stack and ownership: §0 and §1.1.
 2. Service integration: §1.5, §1.6, and the event catalog (§7).
 3. Chat and E2EE: §3.9, §3.10, §3.19, and the open decisions (§9).
-4. Client platforms: §1.9 and the mobile README.
+4. Client platforms: §1.9, the web design system (`design-system.md`), and the mobile README.
 
 **Conventions for this folder:**
 

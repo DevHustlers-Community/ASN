@@ -4,7 +4,7 @@ type: feat
 scope: web
 summary: Scaffold web client application and document frontend design system
 breaking: false
-adr: -
+adr: 0012
 contracts: -
 ---
 
@@ -16,7 +16,7 @@ contracts: -
 - Added `@asn/config-typescript` shared presets (`base.json` and `react.json`).
 - Scaffolded public web client in `apps/web/` using React 18, Vite 5, TypeScript 5, and Tailwind CSS.
 - Downloaded and embedded local offline fonts (`IBM Plex Sans Arabic` and `JetBrains Mono`) with `@font-face` definitions; zero external CDN dependencies.
-- Integrated the initial "Tawasol" (تواصل) brand logo and updated application headers and favicon.
+- Integrated the initial ASN brand logo assets and updated application headers and favicon.
 - Authored the comprehensive design system specification in `docs/architecture/design-system.md` covering the token-driven multi-theme engine, 4px spacing grid, WCAG 2.1 AA accessibility (Triple-Signal rule), adaptive media grid, and 4px consecutive chat grouping.
 - Added structured `README.md` documentation for all feature and utility directories under `apps/web/src/`.
 
@@ -26,10 +26,10 @@ The ASN web client had only placeholder documentation and no runnable scaffoldin
 
 ## Verification
 
-- `npm install --prefix apps/web` (and monorepo root) succeeded cleanly.
-- `npm run build:web` (`tsc && vite build`) passed with zero type or bundling errors.
-- `py scripts/ci/check-changelog.py --all`
-- `py scripts/ci/check-links.py`
+- `bun install` succeeded cleanly.
+- `bun run build:web` (`tsc && vite build`) passed with zero type or bundling errors.
+- `python3 scripts/ci/check-changelog.py --all`
+- `python3 scripts/ci/check-links.py`
 
 ## Follow-ups
 
