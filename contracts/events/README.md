@@ -27,5 +27,21 @@ events/
   [the event catalog](../../docs/architecture/architecture-and-schema.md)
   gets a schema before its producer is implemented.
 
-**Status:** not written yet. The envelope schema is the first artifact to land,
-before the broker proof of concept.
+**Status:** the envelope schema has landed
+([`common/event-envelope.schema.json`](common/event-envelope.schema.json)).
+Per-event payload schemas land before their producers are implemented.
+
+## Transport notes ([ADR 0008](../../docs/decisions/0008-broker-transport-and-delivery-contract.md))
+
+- The publisher identity is the authenticated service credential, never a body
+  field.
+- The broker stores a SHA-256 `content_hash` over the complete canonical
+  envelope serialization. A repeated `event_id` with identical content and
+  publisher is a duplicate (200); with any differing effective field or
+  publisher it is a conflict (409).
+- The request body limit is 256 KiB (the whole HTTP request body), enforced at
+  the transport adapter before parsing; larger content travels by claim-check
+  reference inside the payload.
+- Consumers must be idempotent: deduplicate on `event_id` and reject stale
+  `aggregate_version` values in their own database, atomic with the business
+  effect.

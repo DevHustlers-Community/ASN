@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "common/event-envelope.schema.json",
+  "title": "ASN event envelope",
+  "description": "Canonical envelope carried by every ASN event. The broker validates this envelope and stores a content hash over the complete canonical serialization; per-event payload schemas constrain the payload object. See docs/decisions/0008-broker-transport-and-delivery-contract.md for the delivery contract.",
+  "type": "object",
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "UUIDv7 generated in the producing service's application code. Stable across outbox retries and broker redelivery; the broker treats a repeated event_id with identical content as a duplicate publish (200) and with differing content as a conflict (409)."
+    },
+    "type": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$",
+      "description": "Dotted lowercase event type, e.g. user.created or community.member_added. Breaking payload changes require a new type with a .v2 suffix per contracts/VERSIONING.md."
+    },
+    "schema_version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Version of the payload schema for this event type. Additive changes keep the version; breaking changes publish a new event type."
+    },
+    "occurred_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "RFC 3339 timestamp in UTC marking when the business change happened at the producer."
+    },
+    "aggregate_type": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "description": "Aggregate kind this event belongs to (e.g. user, conversation, community). Together with aggregate_id and aggregate_version; all three are present or all three are absent."
+    },
+    "aggregate_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Identifier of the aggregate instance. Soft reference to the owning service database (ref: <db>.<table>.<column>), never a foreign key."
+    },
+    "aggregate_version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Strictly increasing, unique per (aggregate_type, aggregate_id). Exactly one event carries each version: this is a deliberate event-model constraint. The broker orders per-aggregate delivery by this value and rejects a reused version with 422."
+    },
+    "trace_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Optional correlation identifier (W3C trace id or UUID) propagated from the producing request."
+    },
+    "payload": {
+      "type": "object",
+      "description": "Event payload: identifiers and small deltas only. Large content travels by claim-check reference (an object-storage key), never inline. Payloads never contain plaintext chat content, private keys, recovery secrets, or raw backups. Constrained by the per-event schema for the event type."
+    }
+  },
+  "required": ["event_id", "type", "schema_version", "occurred_at", "payload"],
+  "allOf": [
+    {
+      "if": {
+        "anyOf": [
+          { "required": ["aggregate_type"] },
+          { "required": ["aggregate_id"] },
+          { "required": ["aggregate_version"] }
+        ]
+      },
+      "then": {
+        "required": ["aggregate_type", "aggregate_id", "aggregate_version"]
+      }
+    }
+  ],
+  "additionalProperties": false
+}
