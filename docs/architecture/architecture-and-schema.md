@@ -961,7 +961,7 @@ These do not block schema work, but must be finalized before protocol implementa
 
 1. **REST contract and authentication:** shared error envelope, token/session strategy, service-to-service authentication (mTLS vs signed service tokens), rate-limit policy, and OpenAPI ownership.
 2. **TypeScript service stack:** HTTP framework (Elysia/Hono), query layer (Drizzle/Kysely), migration tool, validation strategy, and the Bun-to-Node fallback criteria.
-3. **Broker transport:** HTTP polling/long-polling vs a persistent connection; lease renewal, max in-flight deliveries, retry/backoff defaults, dead-letter retention, event log retention, payload size limit, and replay authorization. Record these in an ADR before implementation.
+3. **Broker transport:** HTTP polling/long-polling vs a persistent connection; lease renewal, max in-flight deliveries, retry/backoff defaults, dead-letter retention, event log retention, payload size limit, and replay authorization. Settled in [ADR 0008](../decisions/0008-broker-transport-and-delivery-contract.md) (accepted): HTTP claim-based pull with long-polling.
 4. **Broker partitioning and scaling:** single-node correctness first; define the measured thresholds that would justify horizontal scaling or partitioning.
 5. **Critical authorization propagation:** explicit completion semantics for blocks, suspensions, bans, community removals, and other security-sensitive state changes. Projection freshness and event lag must not silently weaken enforcement.
 6. **E2EE protocol and supported libraries:** compare maintained implementations for React Native (Android/iOS) and React web; evaluate licensing, update cadence, test vectors, multi-device behavior, group chat behavior, and post-quantum roadmap. No custom protocol.

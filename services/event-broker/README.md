@@ -5,8 +5,9 @@ around NATS, Kafka, RabbitMQ, or another broker.
 
 **Status:** scaffolded OTP service. It compiles, boots, and connects to
 PostgreSQL, but it has no event schemas, migrations, transport, or delivery
-logic yet. Transport (HTTP polling vs persistent connection), retention, and
-limits remain open in [ADR 0008](../../docs/decisions/README.md).
+logic yet. [ADR 0008](../../docs/decisions/0008-broker-transport-and-delivery-contract.md)
+(accepted) selects HTTP claim-based pull delivery with long-polling; the
+transport adapter is not implemented yet.
 
 **Owns:** the durable event log, subscription definitions, delivery attempts and
 leases, acknowledgements, retry state, dead letters, and retention.
@@ -90,8 +91,9 @@ mix test
 ```
 
 The broker has no listener yet. Running `mix run --no-halt` starts the OTP
-application and repo, then waits. The HTTP or persistent-connection endpoint is
-added only after ADR 0008.
+application and repo, then waits. The HTTP claim endpoint described in
+[ADR 0008](../../docs/decisions/0008-broker-transport-and-delivery-contract.md)
+lands with the transport adapter.
 
 Verification loop:
 
@@ -109,9 +111,11 @@ mix test
 | `BROKER_TEST_DATABASE_URL` | test | Dev default points at `broker_db_test` |
 | `POOL_SIZE` | prod | Ecto pool size, default `10` |
 
-`BROKER_BASE_URL`, `BROKER_SERVICE_TOKEN`, and `EVENT_BROKER_PORT` in
-[`.env.example`](../../.env.example) are reserved for the transport layer and are
-not read by the scaffold.
+`BROKER_BASE_URL`, `BROKER_SERVICE_TOKEN`, `BROKER_ADMIN_TOKEN`, and
+`EVENT_BROKER_PORT` in [`.env.example`](../../.env.example) are reserved for the
+transport and credential layers ([ADR 0008](../../docs/decisions/0008-broker-transport-and-delivery-contract.md),
+accepted) and are not read by the scaffold. `BROKER_ADMIN_TOKEN` seeds the
+first admin credential at first boot once credential storage exists.
 
 ## Boundaries
 
@@ -135,5 +139,6 @@ and storage implementation. Required failure paths are listed in
 
 - [Architecture and schema](../../docs/architecture/architecture-and-schema.md)
 - [Development guide](../../docs/development/README.md)
+- [ADR 0008 — Broker transport and delivery contract](../../docs/decisions/0008-broker-transport-and-delivery-contract.md)
 - [ADR 0011 — Elixir and PostgreSQL baseline](../../docs/decisions/0011-elixir-and-postgres-baseline.md)
 - [Broker operations](../../infrastructure/event-broker/README.md)
