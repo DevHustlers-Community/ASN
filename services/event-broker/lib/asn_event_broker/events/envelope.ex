@@ -95,6 +95,7 @@ defmodule AsnEventBroker.Events.Envelope do
 
   defp envelope(attrs) do
     {:ok, occurred_at, _input_offset} = DateTime.from_iso8601(attrs["occurred_at"])
+    occurred_at = usec_precision(occurred_at)
 
     %__MODULE__{
       event_id: attrs["event_id"],
@@ -188,4 +189,11 @@ defmodule AsnEventBroker.Events.Envelope do
   defp present?(nil), do: false
   defp present?(""), do: false
   defp present?(_), do: true
+
+  # :utc_datetime_usec columns require microsecond precision; an input like
+  # "2026-10-25T10:00:00Z" parses with {0, 0}.
+  defp usec_precision(datetime) do
+    %{microsecond: {microseconds, _}} = datetime
+    %{datetime | microsecond: {microseconds, 6}}
+  end
 end
