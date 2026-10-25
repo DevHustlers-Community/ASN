@@ -6,10 +6,10 @@ loudly.
 | Path | Purpose |
 |---|---|
 | `dev/install-git-hooks.sh` | Point Git at `.githooks/` for local change-record enforcement |
+| `dev/broker-verify.sh` | Full event-broker verification loop: compose PostgreSQL, wait for health, migrate, format, compile, test |
 | `ci/check-changelog.py` | Validate change-record names, front matter, and per-commit presence |
 | `ci/check-commit-trailer.py` | Require a `Changelog:` trailer in commit messages |
 | `ci/check-links.py` | Verify relative links in Markdown files |
-| `dev/` | Start/stop local dependencies, wait-for-health, seed data (planned) |
 | `db/` | Explicit migration, reset, and backup/restore helpers per service (planned) |
 | `contracts/` | Validate schemas and regenerate clients/types (planned) |
 
@@ -22,5 +22,6 @@ loudly.
   environment.
 - Backup scripts operate on snapshots, never on live SQLite/WAL file sets.
 
-**Status:** governance scripts and the hook installer exist. Local environment,
-migration, and contract scripts land with the first runnable service.
+**Status:** governance scripts, the hook installer, and the broker verify
+loop exist. Migration and contract scripts land with the next runnable
+services and the contracts tooling.

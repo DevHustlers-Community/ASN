@@ -45,9 +45,9 @@ empty placeholder directories.
 ## Transport boundary
 
 [ADR 0008](../../docs/decisions/0008-broker-transport-and-delivery-contract.md)
-(accepted) selects HTTP claim-based pull delivery with long-polling. The
-scaffold still contains no HTTP adapter, endpoint, router, or listener; the
-adapter lands as a separate supervised component per the ADR:
+(accepted) selects HTTP claim-based pull delivery with long-polling. The core
+publish/claim/ack machinery is implemented as library functions; the HTTP
+adapter (Plug + Bandit at the edge, OpenAPI contract first) is not started:
 
 - Add the adapter as a separate supervised component (Plug + Bandit at the
   edge only).

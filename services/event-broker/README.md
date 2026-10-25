@@ -3,11 +3,14 @@
 Custom Elixir/OTP event broker persisted in `broker_db`. It is not a wrapper
 around NATS, Kafka, RabbitMQ, or another broker.
 
-**Status:** scaffolded OTP service. It compiles, boots, and connects to
-PostgreSQL, but it has no event schemas, migrations, transport, or delivery
-logic yet. [ADR 0008](../../docs/decisions/0008-broker-transport-and-delivery-contract.md)
-(accepted) selects HTTP claim-based pull delivery with long-polling; the
-transport adapter is not implemented yet.
+**Status:** core delivery is implemented and integration-tested on real
+PostgreSQL: schema migrations, envelope validation with content hashing,
+idempotent publish with fan-out, long-poll claims with per-aggregate ordering
+and lease semantics, ack/nack/extend with backoff, and the lease reaper.
+The HTTP edge, authentication, dead-letter admin actions with the audit log,
+and retention are not implemented yet. Transport is decided by
+[ADR 0008](../../docs/decisions/0008-broker-transport-and-delivery-contract.md)
+(accepted).
 
 **Owns:** the durable event log, subscription definitions, delivery attempts and
 leases, acknowledgements, retry state, dead letters, and retention.
@@ -34,8 +37,20 @@ rules.
 
 | Path | Responsibility |
 |---|---|
-| `lib/asn_event_broker/application.ex` | Root supervision tree; starts the repo |
+| `lib/asn_event_broker/application.ex` | Root supervision tree; starts the repo, the claim waiter registry, and (outside tests) the lease reaper |
 | `lib/asn_event_broker/repo.ex` | The only Ecto boundary for `broker_db` |
+| `lib/asn_event_broker/uuid_v7.ex` | RFC 9562 UUIDv7 generation (stand-in until §9 item 16 is decided) |
+| `lib/asn_event_broker/events/` | Envelope validation, canonical content hashing, event schema |
+| `lib/asn_event_broker/subscriptions/` | Subscription schema and changeset |
+| `lib/asn_event_broker/publishing.ex` | Idempotent publish (201/200/409/422) and fan-out |
+| `lib/asn_event_broker/routing.ex` | Eligible-subscription selection |
+| `lib/asn_event_broker/delivery.ex` | Claims, leases, per-aggregate ordering, long-poll waiting |
+| `lib/asn_event_broker/delivery/` | Delivery schema and the claim waiter registry |
+| `lib/asn_event_broker/acknowledgements.ex` | Ack/nack/extend with exact lease-token semantics |
+| `lib/asn_event_broker/retries.ex` | Bounded exponential backoff with jitter |
+| `lib/asn_event_broker/workers/` | Scheduled workers (lease reaper) |
+| `lib/asn_event_broker/security/` | Service credential schema (auth flow lands with the HTTP edge) |
+| `lib/asn_event_broker/audit/` | Append-only admin audit records |
 | `config/` | Compile-time configuration plus dev/test/prod/runtime split |
 | `priv/repo/migrations/` | Broker-owned forward-only migrations |
 | `test/support/` | Database test case and sandbox helper |
@@ -206,10 +221,16 @@ mix ecto.migrate
 mix test
 ```
 
-The broker has no listener yet. Running `mix run --no-halt` starts the OTP
-application and repo, then waits. The HTTP claim endpoint described in
+The broker has no HTTP listener yet: the core publish/claim/ack machinery is
+callable as library functions and proven by integration tests. The HTTP claim
+endpoint described in
 [ADR 0008](../../docs/decisions/0008-broker-transport-and-delivery-contract.md)
-lands with the transport adapter.
+lands with the transport adapter (phase: edge + auth, OpenAPI contract first).
+Running `mix run --no-halt` starts the OTP application, repo, waiter registry,
+and lease reaper, then waits.
+
+For the full one-command verification loop, run `scripts/dev/broker-verify.sh`
+from the repository root.
 
 Verification loop:
 
