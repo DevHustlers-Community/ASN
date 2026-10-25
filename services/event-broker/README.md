@@ -37,7 +37,7 @@ rules.
 | `lib/asn_event_broker/application.ex` | Root supervision tree; starts the repo |
 | `lib/asn_event_broker/repo.ex` | The only Ecto boundary for `broker_db` |
 | `config/` | Compile-time configuration plus dev/test/prod/runtime split |
-| `priv/repo/migrations/` | Broker-owned migrations; intentionally empty |
+| `priv/repo/migrations/` | Broker-owned forward-only migrations |
 | `test/support/` | Database test case and sandbox helper |
 
 ## First-release scope
