@@ -27,6 +27,13 @@ config :asn_event_broker, :retention,
   terminal_days: 30,
   event_log_days: 7
 
+# The HTTP edge (ADR 0008 §2): Plug + Bandit at the edge only.
+config :asn_event_broker, :http,
+  enabled: true,
+  port: 4004
+
+config :asn_event_broker, :bootstrap_admin, true
+
 config :logger, :default_formatter,
   format: "$time $metadata[$level] $message\n",
   metadata: [:request_id]

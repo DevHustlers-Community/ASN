@@ -7,7 +7,7 @@ One OpenAPI 3.x file per REST service.
 | `social-api.yaml` | Social API |
 | `chat-api.yaml` | Chat service |
 | `moderation-api.yaml` | Moderation API |
-| `event-broker-api.yaml` | Event broker, only if ADR 0008 selects an HTTP transport |
+| `event-broker-api.yaml` | Event broker (ADR 0008, accepted: HTTP claim-based pull) |
 
 **Conventions:**
 
@@ -23,6 +23,11 @@ One OpenAPI 3.x file per REST service.
 **CI:** lint (e.g. Redocly/Spectral), breaking-change detection against the base
 branch, and client generation drift check.
 
-**Status:** not written yet. Authoring starts with the Social API and Chat
-endpoints needed by the first vertical slice. The broker OpenAPI file waits on
-ADR 0008.
+**Status:** not written yet for the business services; authoring starts with
+the Social API and Chat endpoints needed by the first vertical slice. The
+event-broker contract has landed
+([`event-broker-api.yaml`](event-broker-api.yaml)) with the broker paths
+decided by ADR 0008 (`/v1/...`, which intentionally differs from the `/api/v1`
+client convention: the broker is service-to-service only). The shared error
+envelope question remains open in §9.1; the broker uses RFC 9457 Problem
+Details with a stable `code` extension until that decision.

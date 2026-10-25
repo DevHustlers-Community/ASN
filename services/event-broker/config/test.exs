@@ -12,3 +12,5 @@ config :asn_event_broker, AsnEventBroker.Repo,
 config :logger, level: :warning
 
 config :asn_event_broker, :start_workers, false
+config :asn_event_broker, :http, enabled: false
+config :asn_event_broker, :bootstrap_admin, false

@@ -1,0 +1,395 @@
+openapi: 3.1.0
+info:
+  title: ASN Event Broker API
+  version: 1.0.0
+  description: >
+    HTTP claim-based pull delivery for the ASN event broker (ADR 0008).
+    Publishers POST idempotent events; consumers claim deliveries with
+    long-polling and acknowledge them with lease tokens. Delivery is
+    at-least-once: consumers deduplicate on event_id and reject stale
+    aggregate_version values. Per-aggregate ordering only.
+servers:
+  - url: /v1
+security:
+  - brokerBearer: []
+tags:
+  - name: publish
+  - name: consume
+  - name: admin
+  - name: health
+paths:
+  /events:
+    post:
+      tags: [publish]
+      operationId: publishEvent
+      summary: Publish an event (idempotent on event_id)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EventEnvelope'
+      responses:
+        '201':
+          description: Event accepted and fanned out to eligible subscriptions.
+        '200':
+          description: >
+            Duplicate publish: the same event_id with the same stored
+            content hash and the same publisher. No state changed.
+        '409':
+          description: >
+            The same event_id with a different content hash or a different
+            publisher.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '422':
+          description: >
+            A different event_id reused an aggregate_version (one event per
+            aggregate version is a deliberate event-model constraint).
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '400':
+          description: Invalid envelope.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '403':
+          description: Publisher not allowed to emit this event type.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '413':
+          description: Request body exceeds the 256 KiB limit.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /subscriptions/{name}/claims:
+    post:
+      tags: [consume]
+      operationId: claimDeliveries
+      summary: Claim deliveries (long-poll)
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ClaimRequest' }
+      responses:
+        '200':
+          description: Claimed deliveries, possibly empty after the wait elapsed.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ClaimResponse' }
+        '404':
+          description: Unknown subscription.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '409':
+          description: Subscription is paused.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /deliveries/{id}/ack:
+    post:
+      tags: [consume]
+      operationId: acknowledgeDelivery
+      summary: Acknowledge a delivery (idempotent with the final lease token)
+      parameters: [{ $ref: '#/components/parameters/DeliveryId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LeaseToken' }
+      responses:
+        '200': { description: Acknowledged (or already acknowledged with the same token). }
+        '404':
+          description: Unknown delivery.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '409':
+          description: Stale lease token or expired lease.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /deliveries/{id}/nack:
+    post:
+      tags: [consume]
+      operationId: negativelyAcknowledgeDelivery
+      summary: Fail a delivery (reschedules with backoff or dead-letters)
+      parameters: [{ $ref: '#/components/parameters/DeliveryId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LeaseToken' }
+      responses:
+        '200': { description: Rescheduled or dead-lettered. }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/StaleLease' }
+
+  /deliveries/{id}/extend:
+    post:
+      tags: [consume]
+      operationId: extendLease
+      summary: Renew the visibility timeout
+      parameters: [{ $ref: '#/components/parameters/DeliveryId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LeaseToken' }
+      responses:
+        '200': { description: Lease extended. }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/StaleLease' }
+
+  /deliveries/{id}/skip:
+    post:
+      tags: [admin]
+      operationId: skipDelivery
+      summary: Permanently skip a dead delivery (audited)
+      parameters: [{ $ref: '#/components/parameters/DeliveryId' }]
+      responses:
+        '200': { description: Skipped (terminal). }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/StaleLease' }
+
+  /deliveries:
+    get:
+      tags: [admin]
+      operationId: inspectDeliveries
+      summary: Inspect deliveries by state
+      parameters:
+        - name: state
+          in: query
+          schema: { type: string, enum: [pending, leased, delivered, dead, skipped] }
+        - name: subscription
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+      responses:
+        '200':
+          description: Matching deliveries for inspection.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deliveries:
+                    type: array
+                    items: { $ref: '#/components/schemas/DeadDelivery' }
+
+  /dead-letters/replay:
+    post:
+      tags: [admin]
+      operationId: replayDeadLetters
+      summary: Replay dead deliveries (audited)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [delivery_id]
+              properties:
+                delivery_id: { type: string, format: uuid }
+      responses:
+        '200': { description: Replayed with a fresh attempt budget. }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/StaleLease' }
+
+  /subscriptions:
+    get:
+      tags: [admin]
+      operationId: listSubscriptions
+      summary: List subscriptions
+      responses:
+        '200':
+          description: Subscriptions.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  subscriptions:
+                    type: array
+                    items: { $ref: '#/components/schemas/Subscription' }
+    post:
+      tags: [admin]
+      operationId: createSubscription
+      summary: Create a subscription (starts at creation; no backfill)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Subscription' }
+      responses:
+        '201': { description: Created. }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /healthz:
+    get:
+      tags: [health]
+      operationId: health
+      summary: Liveness
+      security: []
+      responses:
+        '200': { description: Process is up. }
+
+  /readyz:
+    get:
+      tags: [health]
+      operationId: ready
+      summary: Readiness (database reachable)
+      security: []
+      responses:
+        '200': { description: Ready. }
+        '503': { description: Database unreachable. }
+
+components:
+  securitySchemes:
+    brokerBearer:
+      type: http
+      scheme: bearer
+      description: >
+        Per-service credential issued by the broker; stored hashed. Scopes:
+        publish (relays), consume (claim/ack/nack/extend), admin
+        (inspection, replay, skip, subscription and credential management).
+  parameters:
+    DeliveryId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  responses:
+    NotFound:
+      description: Not found.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    StaleLease:
+      description: Stale lease token or expired lease; no state changed.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Conflict:
+      description: Conflicting state (for example a duplicate subscription name).
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+  schemas:
+    EventEnvelope:
+      type: object
+      description: >
+        Canonical envelope; authoritative schema is
+        contracts/events/common/event-envelope.schema.json. Required fields
+        are event_id, type, schema_version, occurred_at, payload; the
+        aggregate fields are all-or-none. Unknown fields are rejected.
+      additionalProperties: false
+      properties:
+        event_id: { type: string, format: uuid }
+        type: { type: string }
+        schema_version: { type: integer, minimum: 1 }
+        occurred_at: { type: string, format: date-time }
+        aggregate_type: { type: string }
+        aggregate_id: { type: string, format: uuid }
+        aggregate_version: { type: integer, minimum: 1 }
+        trace_id: { type: string }
+        payload: { type: object }
+      required: [event_id, type, schema_version, occurred_at, payload]
+    ClaimRequest:
+      type: object
+      properties:
+        max:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 10
+          description: Delivery cap; consumers control their own pacing.
+        wait_ms:
+          type: integer
+          minimum: 0
+          maximum: 20000
+          default: 0
+          description: Long-poll wait; the broker wakes parked claims on publish.
+    ClaimResponse:
+      type: object
+      required: [deliveries]
+      properties:
+        deliveries:
+          type: array
+          items: { $ref: '#/components/schemas/ClaimedDelivery' }
+    ClaimedDelivery:
+      type: object
+      properties:
+        delivery_id: { type: string, format: uuid }
+        event_id: { type: string, format: uuid }
+        type: { type: string }
+        schema_version: { type: integer }
+        occurred_at: { type: string, format: date-time }
+        aggregate_type: { type: string, nullable: true }
+        aggregate_id: { type: string, format: uuid, nullable: true }
+        aggregate_version: { type: integer, nullable: true }
+        trace_id: { type: string, nullable: true }
+        payload: { type: object }
+        attempts: { type: integer }
+        lease_token: { type: string }
+        lease_expires_at: { type: string, format: date-time }
+      required: [delivery_id, event_id, type, schema_version, occurred_at, payload, attempts, lease_token, lease_expires_at]
+    LeaseToken:
+      type: object
+      required: [lease_token]
+      properties:
+        lease_token: { type: string }
+        error_kind: { type: string, description: nack only }
+        error_message: { type: string, description: nack only }
+    DeadDelivery:
+      type: object
+      properties:
+        delivery_id: { type: string, format: uuid }
+        subscription_name: { type: string }
+        event_id: { type: string, format: uuid }
+        type: { type: string }
+        aggregate_type: { type: string, nullable: true }
+        aggregate_id: { type: string, format: uuid, nullable: true }
+        aggregate_version: { type: integer, nullable: true }
+        attempts: { type: integer }
+        last_error_kind: { type: string, nullable: true }
+        last_error_message: { type: string, nullable: true }
+        dead_lettered_at: { type: string, format: date-time }
+    Subscription:
+      type: object
+      properties:
+        name: { type: string }
+        consumer: { type: string }
+        event_types:
+          type: array
+          items: { type: string }
+          nullable: true
+          description: NULL/absent means all event types.
+        status: { type: string, enum: [active, paused] }
+        max_attempts: { type: integer, minimum: 1 }
+      required: [name, consumer]
+    Problem:
+      type: object
+      description: RFC 9457 Problem Details with a stable broker error code.
+      properties:
+        type: { type: string }
+        title: { type: string }
+        status: { type: integer }
+        code: { type: string }
+        detail: { type: string }
+      required: [type, title, status]

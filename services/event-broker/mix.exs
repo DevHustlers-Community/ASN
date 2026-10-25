@@ -27,7 +27,10 @@ defmodule AsnEventBroker.MixProject do
     [
       {:ecto_sql, "~> 3.14"},
       {:postgrex, "~> 0.22"},
-      {:jason, "~> 1.4"}
+      {:jason, "~> 1.4"},
+      {:plug, "~> 1.16"},
+      {:bandit, "~> 1.13"},
+      {:telemetry, "~> 1.2"}
     ]
   end
 
