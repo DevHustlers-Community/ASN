@@ -44,10 +44,13 @@ empty placeholder directories.
 
 ## Transport boundary
 
-The transport decision is open. The scaffold deliberately contains no HTTP
-adapter, endpoint, router, or listener. When ADR 0008 lands:
+[ADR 0008](../../docs/decisions/0008-broker-transport-and-delivery-contract.md)
+(accepted) selects HTTP claim-based pull delivery with long-polling. The
+scaffold still contains no HTTP adapter, endpoint, router, or listener; the
+adapter lands as a separate supervised component per the ADR:
 
-- Add the adapter as a separate supervised component.
+- Add the adapter as a separate supervised component (Plug + Bandit at the
+  edge only).
 - Keep authentication and request validation at the adapter boundary, delegating
   to `security/` and `publishing/`.
 - Keep delivery leases and acknowledgements independent of the transport.

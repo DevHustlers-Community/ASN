@@ -41,6 +41,9 @@ snapshots/
 *.keystore
 *.jks
 
+# Private session notes (local only, never committed)
+SSS.md
+
 # Editor and OS
 .idea/
 .vscode/
