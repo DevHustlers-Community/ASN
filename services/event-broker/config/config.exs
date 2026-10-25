@@ -20,6 +20,13 @@ config :asn_event_broker, :delivery,
 # sandbox (their logic is tested by direct invocation).
 config :asn_event_broker, :start_workers, true
 
+# Retention defaults from ADR 0008 §8: delivered 24 h, dead/skipped 30 days,
+# event log 7 days (a deletion floor, not a replay promise).
+config :asn_event_broker, :retention,
+  delivered_hours: 24,
+  terminal_days: 30,
+  event_log_days: 7
+
 config :logger, :default_formatter,
   format: "$time $metadata[$level] $message\n",
   metadata: [:request_id]
