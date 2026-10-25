@@ -10,3 +10,5 @@ config :asn_event_broker, AsnEventBroker.Repo,
   pool_size: System.schedulers_online() * 2
 
 config :logger, level: :warning
+
+config :asn_event_broker, :start_workers, false
