@@ -147,7 +147,12 @@ change. Do not create README stubs for leaf utility folders.
 3. **Check open decisions.** If the change depends on an item in §9 of the
    architecture document, do not guess. Propose an ADR and ask.
 4. **Contract first.** API or event changes update `contracts/` before code.
-   Regenerate clients; never hand-edit generated code.
+   Regenerate clients; never hand-edit generated code. Any change to an
+   endpoint (path, method, request/response shape, status code, auth, or
+   error code) must also update the OpenAPI/Swagger contract under
+   `contracts/openapi/` and keep its rendered documentation (the local
+   Swagger UI viewer) in sync; an endpoint change is not complete until the
+   contract and its rendered documentation are updated.
 5. **Implement inside the owner.** Keep domain rules in the service layer, not in
    route handlers, UI, or shared packages.
 6. **Update docs in the same change** when behavior, boundaries, commands,
