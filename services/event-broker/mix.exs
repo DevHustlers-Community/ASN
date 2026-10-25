@@ -26,7 +26,8 @@ defmodule AsnEventBroker.MixProject do
   defp deps do
     [
       {:ecto_sql, "~> 3.14"},
-      {:postgrex, "~> 0.22"}
+      {:postgrex, "~> 0.22"},
+      {:jason, "~> 1.4"}
     ]
   end
 
