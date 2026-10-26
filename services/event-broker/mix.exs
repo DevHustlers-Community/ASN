@@ -30,7 +30,8 @@ defmodule AsnEventBroker.MixProject do
       {:jason, "~> 1.4"},
       {:plug, "~> 1.16"},
       {:bandit, "~> 1.13"},
-      {:telemetry, "~> 1.2"}
+      {:telemetry, "~> 1.2"},
+      {:stream_data, "~> 1.1", only: :test}
     ]
   end
 
