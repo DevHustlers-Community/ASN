@@ -24,6 +24,8 @@ config :asn_chat, AsnChatWeb.Endpoint,
 # Print only warnings and errors during test
 config :logger, level: :warning
 
+config :asn_chat, :events_relay, enabled: false, interval_ms: 1_000, publish_timeout_ms: 5_000
+
 # Initialize plugs at runtime for faster test compilation
 config :phoenix, :plug_init_mode, :runtime
 

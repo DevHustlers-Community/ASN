@@ -11,6 +11,14 @@ config :asn_chat,
   ecto_repos: [AsnChat.Repo],
   generators: [timestamp_type: :utc_datetime]
 
+# Broker relay (ADR 0008 §5 producer contract). Publishes committed outbox
+# rows to the broker; disabled under the test sandbox (relays are exercised
+# by direct invocation).
+config :asn_chat, :events_relay,
+  enabled: true,
+  interval_ms: 1_000,
+  publish_timeout_ms: 5_000
+
 # Configure the endpoint
 config :asn_chat, AsnChatWeb.Endpoint,
   url: [host: "localhost"],
