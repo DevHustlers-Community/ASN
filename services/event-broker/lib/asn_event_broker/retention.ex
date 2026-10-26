@@ -10,7 +10,7 @@ defmodule AsnEventBroker.Retention do
   always finds its payload. Purges run in batches.
   """
 
-  alias AsnEventBroker.Repo
+  alias AsnEventBroker.{Repo, Telemetry}
 
   @purge_delivered_sql """
   DELETE FROM deliveries
@@ -66,6 +66,12 @@ defmodule AsnEventBroker.Retention do
     delivered = delete_in_batches(@purge_delivered_sql, [cutoff_delivered, batch_size])
     terminal = delete_in_batches(@purge_terminal_sql, [cutoff_terminal, batch_size])
     events = delete_in_batches(@purge_events_sql, [cutoff_events, batch_size])
+
+    Telemetry.emit([:retention_purge], %{count: delivered + terminal + events}, %{
+      delivered: delivered,
+      terminal: terminal,
+      events: events
+    })
 
     %{delivered: delivered, terminal: terminal, events: events}
   end

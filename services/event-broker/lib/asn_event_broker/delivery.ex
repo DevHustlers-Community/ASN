@@ -14,7 +14,7 @@ defmodule AsnEventBroker.Delivery do
   import Ecto.Query
 
   alias AsnEventBroker.Delivery.{Delivery, Waiters}
-  alias AsnEventBroker.Repo
+  alias AsnEventBroker.{Repo, Telemetry}
   alias AsnEventBroker.Subscriptions.Subscription
 
   @max_claim_batch 100
@@ -95,8 +95,12 @@ defmodule AsnEventBroker.Delivery do
       lease_batch(subscription, max, min(max, allowed), [])
     end)
     |> case do
-      {:ok, result} -> {:ok, result}
-      {:error, :paused} -> {:error, :paused}
+      {:ok, result} ->
+        Telemetry.emit([:claim], %{count: length(result)}, %{subscription: name})
+        {:ok, result}
+
+      {:error, :paused} ->
+        {:error, :paused}
     end
   end
 

@@ -13,7 +13,7 @@ defmodule AsnEventBroker.Publishing do
     `{:error, :aggregate_version_taken}` (422 at the edge)
   """
 
-  alias AsnEventBroker.{Repo, Routing, UUIDv7}
+  alias AsnEventBroker.{Repo, Routing, Telemetry, UUIDv7}
   alias AsnEventBroker.Delivery.Delivery
   alias AsnEventBroker.Events.{Event, Envelope}
 
@@ -44,10 +44,21 @@ defmodule AsnEventBroker.Publishing do
         end)
 
       case outcome do
-        {:ok, :created} -> {:ok, :created}
-        {:ok, :duplicate} -> {:ok, :duplicate}
-        {:ok, :conflict} -> {:error, :conflict}
-        {:ok, :aggregate_version_taken} -> {:error, :aggregate_version_taken}
+        {:ok, :created} ->
+          Telemetry.emit_count([:publish, :accepted], %{type: envelope.type, outcome: :created})
+          {:ok, :created}
+
+        {:ok, :duplicate} ->
+          Telemetry.emit_count([:publish, :accepted], %{type: envelope.type, outcome: :duplicate})
+          {:ok, :duplicate}
+
+        {:ok, :conflict} ->
+          Telemetry.emit_count([:publish, :rejected], %{reason: :conflict})
+          {:error, :conflict}
+
+        {:ok, :aggregate_version_taken} ->
+          Telemetry.emit_count([:publish, :rejected], %{reason: :aggregate_version_taken})
+          {:error, :aggregate_version_taken}
       end
     end
   end

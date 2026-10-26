@@ -9,7 +9,7 @@ defmodule AsnEventBroker.Acknowledgements do
   never change state.
   """
 
-  alias AsnEventBroker.{Repo, Retries}
+  alias AsnEventBroker.{Repo, Retries, Telemetry}
   alias AsnEventBroker.Delivery.Delivery
 
   @ack_sql """
@@ -63,8 +63,12 @@ defmodule AsnEventBroker.Acknowledgements do
     now = utc_now()
 
     case Repo.query!(@ack_sql, [uuid(delivery_id), now, hash(lease_token)]) do
-      %{num_rows: 1} -> :ok
-      _ -> classify_failure(delivery_id)
+      %{num_rows: 1} ->
+        Telemetry.emit_count([:ack], %{})
+        :ok
+
+      _ ->
+        classify_failure(delivery_id)
     end
   end
 
@@ -84,6 +88,7 @@ defmodule AsnEventBroker.Acknowledgements do
            hash(lease_token)
          ]) do
       %{num_rows: 1, rows: [["dead", _attempts]]} ->
+        Telemetry.emit_count([:dead_letter], %{})
         {:ok, :dead}
 
       %{num_rows: 1, rows: [["pending", attempts]]} ->

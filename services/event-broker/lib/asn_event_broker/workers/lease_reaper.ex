@@ -10,7 +10,7 @@ defmodule AsnEventBroker.Workers.LeaseReaper do
 
   use GenServer
 
-  alias AsnEventBroker.Repo
+  alias AsnEventBroker.{Repo, Telemetry}
 
   @reap_sql """
   UPDATE deliveries
@@ -45,7 +45,9 @@ defmodule AsnEventBroker.Workers.LeaseReaper do
     now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
 
     case Repo.query!(@reap_sql, [now]) do
-      %{num_rows: count} -> count
+      %{num_rows: count} ->
+        if count > 0, do: Telemetry.emit([:lease_expired], %{count: count}, %{})
+        count
     end
   end
 
