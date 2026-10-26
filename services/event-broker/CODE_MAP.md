@@ -45,9 +45,11 @@ empty placeholder directories.
 ## Transport boundary
 
 [ADR 0008](../../docs/decisions/0008-broker-transport-and-delivery-contract.md)
-(accepted) selects HTTP claim-based pull delivery with long-polling. The core
-publish/claim/ack machinery is implemented as library functions; the HTTP
-adapter (Plug + Bandit at the edge, OpenAPI contract first) is not started:
+(accepted) selects HTTP claim-based pull delivery with long-polling. The
+adapter is implemented as `web/router.ex` (Plug + Bandit at the edge only,
+contract-first per `contracts/openapi/event-broker-api.yaml`) and contains
+authentication, scope enforcement, the body-size limit, and Problem Details
+errors — no routing, lease, retry, or retention rules:
 
 - Add the adapter as a separate supervised component (Plug + Bandit at the
   edge only).

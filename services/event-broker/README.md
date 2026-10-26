@@ -3,14 +3,16 @@
 Custom Elixir/OTP event broker persisted in `broker_db`. It is not a wrapper
 around NATS, Kafka, RabbitMQ, or another broker.
 
-**Status:** core delivery is implemented and integration-tested on real
+**Status:** the v1 broker is implemented and integration-tested on real
 PostgreSQL: schema migrations, envelope validation with content hashing,
 idempotent publish with fan-out, long-poll claims with per-aggregate ordering
-and lease semantics, ack/nack/extend with backoff, and the lease reaper.
-The HTTP edge, authentication, dead-letter admin actions with the audit log,
-and retention are not implemented yet. Transport is decided by
-[ADR 0008](../../docs/decisions/0008-broker-transport-and-delivery-contract.md)
-(accepted).
+and lease semantics, ack/nack/extend with backoff, the lease reaper,
+dead-letter replay/skip with an audited admin trail, dependency-aware
+retention, the HTTP edge with scoped bearer credentials
+(`contracts/openapi/event-broker-api.yaml`), and telemetry emission. The
+first producer (chat outbox relay) is wired on the chat side. Remaining:
+metrics exposition, credential-management endpoints beyond revocation, and
+the cross-service e2e harness.
 
 **Owns:** the durable event log, subscription definitions, delivery attempts and
 leases, acknowledgements, retry state, dead letters, and retention.
@@ -221,13 +223,12 @@ mix ecto.migrate
 mix test
 ```
 
-The broker has no HTTP listener yet: the core publish/claim/ack machinery is
-callable as library functions and proven by integration tests. The HTTP claim
-endpoint described in
-[ADR 0008](../../docs/decisions/0008-broker-transport-and-delivery-contract.md)
-lands with the transport adapter (phase: edge + auth, OpenAPI contract first).
-Running `mix run --no-halt` starts the OTP application, repo, waiter registry,
-and lease reaper, then waits.
+The HTTP edge serves the v1 contract at `EVENT_BROKER_PORT` (default 4004).
+Running `mix run --no-halt` starts the OTP application, repo, waiter
+registry, lease reaper, HTTP listener, and admin bootstrap, then waits. The
+first credential is seeded from `BROKER_ADMIN_TOKEN` when the credentials
+table is empty; service credentials are issued through `Security.issue/3`
+(credential-management endpoints land with the next admin surface).
 
 For the full one-command verification loop, run `scripts/dev/broker-verify.sh`
 from the repository root.
