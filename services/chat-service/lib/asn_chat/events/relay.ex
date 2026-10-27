@@ -63,10 +63,13 @@ defmodule AsnChat.Events.Relay do
 
             {:halt, {acc, true}}
 
-          {:error, _reason} ->
+          {:error, reason} ->
             # Timeout/transport ambiguity: stop and retry the same event_id on
             # the next tick (idempotent publish makes this safe).
-            Logger.warning("broker publish for #{row.event_id} not confirmed; will retry")
+            Logger.warning(
+              "broker publish for #{row.event_id} not confirmed (#{inspect(reason)}); will retry"
+            )
+
             {:halt, {acc, true}}
         end
       end)
@@ -87,8 +90,8 @@ defmodule AsnChat.Events.Relay do
     body = Jason.encode!(envelope)
 
     headers = [
-      {"authorization", "Bearer " <> service_token()},
-      {"content-type", "application/json"}
+      {~c"authorization", ~c"Bearer " ++ String.to_charlist(service_token())},
+      {~c"content-type", ~c"application/json"}
     ]
 
     request = {

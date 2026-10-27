@@ -8,7 +8,8 @@ defmodule AsnEventBroker.Application do
     children =
       [
         AsnEventBroker.Repo,
-        AsnEventBroker.Delivery.Waiters
+        AsnEventBroker.Delivery.Waiters,
+        AsnEventBroker.Web.Metrics
       ]
       |> maybe_add_workers()
 

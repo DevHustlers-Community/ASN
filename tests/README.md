@@ -20,4 +20,13 @@ Tests that no single service can own alone.
   events, broker restart, consumer lag, revoked device, membership removal,
   expired upload, deletion during an active report.
 
+## Cross-service end-to-end
+
+[`e2e/broker-relay.sh`](e2e/broker-relay.sh) runs the full event loop against
+live processes: it migrates both databases, boots the broker, issues a real
+credential through the admin API, records a chat outbox row, runs the relay,
+claims and acknowledges the delivery, and checks the metrics trail. It resets
+its own state and picks a random port, so reruns are safe. Prerequisites:
+compose PostgreSQL up and both services' dependencies fetched.
+
 **Status:** not written yet; starts after the first vertical slice exists.

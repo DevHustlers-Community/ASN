@@ -254,6 +254,12 @@ defmodule AsnEventBroker.Web.Router do
     end
   end
 
+  get "/metrics" do
+    conn
+    |> put_resp_content_type("text/plain; version=0.0.4")
+    |> send_resp(200, AsnEventBroker.Web.Metrics.render())
+  end
+
   get "/healthz" do
     send_json(conn, 200, %{"status" => "up"})
   end
@@ -415,8 +421,9 @@ defmodule AsnEventBroker.Web.Router do
     |> Enum.join("; ")
   end
 
-  defp authenticate(%{request_path: path} = conn, _opts) when path in ["/healthz", "/readyz"],
-    do: conn
+  defp authenticate(%{request_path: path} = conn, _opts)
+       when path in ["/healthz", "/readyz", "/metrics"],
+       do: conn
 
   defp authenticate(conn, _opts) do
     case Security.authorize(get_req_header(conn, "authorization") |> List.first()) do

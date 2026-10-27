@@ -20,7 +20,7 @@ defmodule AsnEventBroker.DeliveryTest do
     |> Repo.insert!()
   end
 
-  def publish_aggregate_versions(name, versions) do
+  def publish_aggregate_versions(_name, versions) do
     Enum.each(versions, fn v ->
       attrs = %{
         "event_id" => Ecto.UUID.generate(),

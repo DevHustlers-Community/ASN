@@ -14,8 +14,6 @@ defmodule AsnEventBroker.PropertyTest do
   alias AsnEventBroker.Events.Envelope
   alias AsnEventBroker.Subscriptions.Subscription
 
-  @agg_id "01912345-6789-7000-8000-0000000000ab"
-
   property "valid envelopes always validate and hash deterministically" do
     check all(
             version <- integer(1..1_000),

@@ -16,3 +16,10 @@ if config_env() == :prod do
     pool_size: String.to_integer(System.get_env("POOL_SIZE") || "10"),
     socket_options: maybe_ipv6
 end
+
+# HTTP edge port: EVENT_BROKER_PORT was reserved in .env.example for this.
+if config_env() != :test do
+  config :asn_event_broker, :http,
+    enabled: System.get_env("EVENT_BROKER_HTTP_DISABLED") != "true",
+    port: String.to_integer(System.get_env("EVENT_BROKER_PORT") || "4004")
+end
