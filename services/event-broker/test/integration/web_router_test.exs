@@ -228,6 +228,108 @@ defmodule AsnEventBroker.Web.RouterTest do
     assert %{"code" => "payload_too_large"} = Jason.decode!(conn.resp_body)
   end
 
+  test "PATCH subscription pauses and resumes with an audit trail" do
+    admin = issue([:publish, :consume, :admin]).token
+
+    assert %{status: 201} =
+             call("POST", "/v1/subscriptions", admin, %{
+               "name" => "patched",
+               "consumer" => "chat-service"
+             })
+
+    assert %{status: 201} = call("POST", "/v1/events", admin, publish_body(Ecto.UUID.generate()))
+
+    assert %{status: 200, resp_body: body} =
+             call("PATCH", "/v1/subscriptions/patched", admin, %{"status" => "paused"})
+
+    assert Jason.decode!(body)["status"] == "paused"
+    assert %{status: 409} = call("POST", "/v1/subscriptions/patched/claims", admin, %{"max" => 1})
+
+    assert %{status: 200} =
+             call("PATCH", "/v1/subscriptions/patched", admin, %{"status" => "active"})
+
+    assert %{status: 200} = call("POST", "/v1/subscriptions/patched/claims", admin, %{"max" => 1})
+
+    audit_actions = Repo.all(AsnEventBroker.Audit.AuditEntry) |> Enum.map(& &1.action)
+    assert "subscription.update" in audit_actions
+
+    assert %{status: 404} =
+             call("PATCH", "/v1/subscriptions/nope", admin, %{"status" => "paused"})
+  end
+
+  test "PATCH subscription can update event_types filters" do
+    admin = issue([:publish, :consume, :admin]).token
+
+    assert %{status: 201} =
+             call("POST", "/v1/subscriptions", admin, %{
+               "name" => "filtered",
+               "consumer" => "chat-service",
+               "event_types" => ["report.created"]
+             })
+
+    assert %{status: 201} =
+             call("POST", "/v1/events", admin, publish_body(Ecto.UUID.generate()))
+
+    assert %{status: 200} =
+             call("PATCH", "/v1/subscriptions/filtered", admin, %{
+               "event_types" => ["user.created"]
+             })
+
+    # New filter applies from now on: deliveries are created at publish time.
+    assert %{status: 201} = call("POST", "/v1/events", admin, publish_body(Ecto.UUID.generate()))
+
+    conn = call("POST", "/v1/subscriptions/filtered/claims", admin, %{"max" => 10})
+    assert [%{"type" => "user.created"}] = Jason.decode!(conn.resp_body)["deliveries"]
+  end
+
+  test "credential lifecycle: issue once, list without secrets, revoke blocks access" do
+    admin = issue([:admin]).token
+
+    conn =
+      call("POST", "/v1/credentials", admin, %{
+        "service_name" => "social-api",
+        "scopes" => ["publish"]
+      })
+
+    assert conn.status == 201
+
+    assert %{"credential_id" => credential_id, "token" => issued_token} =
+             Jason.decode!(conn.resp_body)
+
+    conn = call("GET", "/v1/credentials", admin)
+    views = Jason.decode!(conn.resp_body)["credentials"]
+    view = Enum.find(views, &(&1["credential_id"] == credential_id))
+    assert view["service_name"] == "social-api"
+    refute Map.has_key?(view, "token")
+    refute Map.has_key?(view, "token_hash")
+
+    # The issued token works, revocation stops it immediately.
+    assert %{status: 403} = call("GET", "/v1/credentials", issued_token)
+
+    revoker = issue([:admin]).token
+    assert %{status: 200} = call("POST", "/v1/credentials/#{credential_id}/revoke", revoker, nil)
+
+    assert %{status: 401} =
+             call("POST", "/v1/events", issued_token, publish_body(Ecto.UUID.generate()))
+
+    assert %{status: 404} =
+             call("POST", "/v1/credentials/#{Ecto.UUID.generate()}/revoke", revoker, nil)
+
+    audit_actions = Repo.all(AsnEventBroker.Audit.AuditEntry) |> Enum.map(& &1.action)
+    assert "credential.create" in audit_actions
+    assert "credential.revoke" in audit_actions
+  end
+
+  test "credential issuance rejects unknown scopes" do
+    admin = issue([:admin]).token
+
+    assert %{status: 400} =
+             call("POST", "/v1/credentials", admin, %{
+               "service_name" => "x",
+               "scopes" => ["publish", "root"]
+             })
+  end
+
   test "unknown routes return problem details" do
     admin = issue([:admin]).token
     conn = call("GET", "/v1/nothing", admin)

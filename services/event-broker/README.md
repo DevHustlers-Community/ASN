@@ -11,8 +11,7 @@ dead-letter replay/skip with an audited admin trail, dependency-aware
 retention, the HTTP edge with scoped bearer credentials
 (`contracts/openapi/event-broker-api.yaml`), and telemetry emission. The
 first producer (chat outbox relay) is wired on the chat side. Remaining:
-metrics exposition, credential-management endpoints beyond revocation, and
-the cross-service e2e harness.
+metrics exposition and the cross-service e2e harness.
 
 **Owns:** the durable event log, subscription definitions, delivery attempts and
 leases, acknowledgements, retry state, dead letters, and retention.
@@ -227,8 +226,10 @@ The HTTP edge serves the v1 contract at `EVENT_BROKER_PORT` (default 4004).
 Running `mix run --no-halt` starts the OTP application, repo, waiter
 registry, lease reaper, HTTP listener, and admin bootstrap, then waits. The
 first credential is seeded from `BROKER_ADMIN_TOKEN` when the credentials
-table is empty; service credentials are issued through `Security.issue/3`
-(credential-management endpoints land with the next admin surface).
+table is empty; further credentials are issued, listed, and revoked through
+the admin endpoints (`/v1/credentials`, `/v1/credentials/{id}/revoke`), and
+subscriptions are paused, resumed, and re-filtered through
+`PATCH /v1/subscriptions/{name}` — all audited.
 
 For the full one-command verification loop, run `scripts/dev/broker-verify.sh`
 from the repository root.

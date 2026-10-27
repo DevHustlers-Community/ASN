@@ -11,7 +11,7 @@ defmodule AsnEventBroker.Security do
 
   import Ecto.Query
 
-  alias AsnEventBroker.{Repo, UUIDv7}
+  alias AsnEventBroker.{Audit, Repo, UUIDv7}
   alias AsnEventBroker.Security.ServiceCredential
 
   @admin_scopes [:publish, :consume, :admin]
@@ -30,6 +30,19 @@ defmodule AsnEventBroker.Security do
         allowed_event_types: Keyword.get(opts, :allowed_event_types)
       })
       |> Repo.insert!()
+
+    # Audited per ADR 0008 §9. The plaintext token is never recorded; the
+    # bootstrap credential (no actor yet) is its own audit actor.
+    Audit.record(
+      Keyword.get(opts, :actor_credential_id) || credential.credential_id,
+      "credential.create",
+      "credential:" <> credential.credential_id,
+      %{
+        "service_name" => service_name,
+        "scopes" => Enum.map(scopes, &to_string/1),
+        "allowed_event_types" => Keyword.get(opts, :allowed_event_types)
+      }
+    )
 
     %{credential_id: credential.credential_id, token: token}
   end
@@ -104,9 +117,9 @@ defmodule AsnEventBroker.Security do
       when is_list(types),
       do: type in types
 
-  @doc "Marks a credential revoked (admin rotation/revocation)."
-  @spec revoke(String.t()) :: :ok | {:error, :not_found}
-  def revoke(credential_id) do
+  @doc "Marks a credential revoked (admin rotation/revocation), with an audit entry."
+  @spec revoke(String.t(), String.t()) :: :ok | {:error, :not_found}
+  def revoke(credential_id, actor_credential_id) do
     case Repo.get(ServiceCredential, credential_id) do
       nil ->
         {:error, :not_found}
@@ -117,6 +130,10 @@ defmodule AsnEventBroker.Security do
           revoked_at: DateTime.utc_now() |> DateTime.truncate(:microsecond)
         )
         |> Repo.update!()
+
+        Audit.record(actor_credential_id, "credential.revoke", "credential:" <> credential_id, %{
+          "service_name" => credential.service_name
+        })
 
         :ok
     end

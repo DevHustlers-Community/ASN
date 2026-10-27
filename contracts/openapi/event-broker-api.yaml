@@ -240,6 +240,85 @@ paths:
         '201': { description: Created. }
         '409': { $ref: '#/components/responses/Conflict' }
 
+  /subscriptions/{name}:
+    patch:
+      tags: [admin]
+      operationId: updateSubscription
+      summary: Update status (pause/resume), filters, or retry budget (audited)
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status: { type: string, enum: [active, paused] }
+                event_types:
+                  type: array
+                  items: { type: string }
+                  nullable: true
+                max_attempts: { type: integer, minimum: 1 }
+      responses:
+        '200':
+          description: Updated subscription.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Subscription' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /credentials:
+    get:
+      tags: [admin]
+      operationId: listCredentials
+      summary: List credentials (never includes tokens or hashes)
+      responses:
+        '200':
+          description: Credentials.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  credentials:
+                    type: array
+                    items: { $ref: '#/components/schemas/CredentialView' }
+    post:
+      tags: [admin]
+      operationId: issueCredential
+      summary: Issue a new credential (token returned exactly once; audited)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CredentialInput' }
+      responses:
+        '201':
+          description: Issued credential with its one-time plaintext token.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CredentialIssued' }
+        '400': { $ref: '#/components/responses/Conflict' }
+
+  /credentials/{id}/revoke:
+    post:
+      tags: [admin]
+      operationId: revokeCredential
+      summary: Revoke a credential (audited; requests with it fail from now on)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Revoked. }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   /healthz:
     get:
       tags: [health]
@@ -383,6 +462,47 @@ components:
         status: { type: string, enum: [active, paused] }
         max_attempts: { type: integer, minimum: 1 }
       required: [name, consumer]
+    CredentialInput:
+      type: object
+      required: [service_name, scopes]
+      properties:
+        service_name: { type: string }
+        scopes:
+          type: array
+          items: { type: string, enum: [publish, consume, admin] }
+          minItems: 1
+        allowed_event_types:
+          type: array
+          items: { type: string }
+          nullable: true
+          description: Publish-scope restriction; absent means all event types.
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+    CredentialIssued:
+      type: object
+      description: The plaintext token appears here and nowhere else.
+      properties:
+        credential_id: { type: string, format: uuid }
+        token: { type: string }
+      required: [credential_id, token]
+    CredentialView:
+      type: object
+      description: Credential metadata only; never the token or its hash.
+      properties:
+        credential_id: { type: string, format: uuid }
+        service_name: { type: string }
+        scopes:
+          type: array
+          items: { type: string, enum: [publish, consume, admin] }
+        allowed_event_types:
+          type: array
+          items: { type: string }
+          nullable: true
+        expires_at: { type: string, format: date-time, nullable: true }
+        revoked_at: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time }
     Problem:
       type: object
       description: RFC 9457 Problem Details with a stable broker error code.

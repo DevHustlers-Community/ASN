@@ -16,8 +16,9 @@ defmodule AsnEventBroker.Web.Router do
 
   import Ecto.Query
 
-  alias AsnEventBroker.{DeadLetter, Delivery, Publishing, Security}
+  alias AsnEventBroker.{Audit, DeadLetter, Delivery, Publishing, Repo, Security}
   alias AsnEventBroker.Acknowledgements
+  alias AsnEventBroker.Security.ServiceCredential
   alias AsnEventBroker.Subscriptions.Subscription
 
   @max_body_bytes 256 * 1024
@@ -174,6 +175,85 @@ defmodule AsnEventBroker.Web.Router do
     end
   end
 
+  patch "/v1/subscriptions/:name" do
+    if Security.scope_authorized?(conn.assigns.credential, :admin) do
+      actor = conn.assigns.credential.credential_id
+      attrs = Map.take(conn.body_params, ["status", "event_types", "max_attempts"])
+
+      case Repo.get_by(Subscription, name: name) do
+        nil ->
+          problem(conn, 404, "not_found", "unknown subscription")
+
+        subscription ->
+          case subscription |> Subscription.changeset(attrs) |> Repo.update() do
+            {:ok, updated} ->
+              Audit.record(actor, "subscription.update", "subscription:" <> name, %{
+                "status" => attrs["status"],
+                "event_types" => attrs["event_types"],
+                "max_attempts" => attrs["max_attempts"]
+              })
+
+              send_json(conn, 200, subscription_view(updated))
+
+            {:error, changeset} ->
+              problem(conn, 409, "subscription_rejected", format_changeset(changeset))
+          end
+      end
+    else
+      problem(conn, 403, "missing_scope", "admin scope required")
+    end
+  end
+
+  get "/v1/credentials" do
+    if Security.scope_authorized?(conn.assigns.credential, :admin) do
+      credentials =
+        Repo.all(ServiceCredential)
+        |> Enum.map(&credential_view/1)
+
+      send_json(conn, 200, %{"credentials" => credentials})
+    else
+      problem(conn, 403, "missing_scope", "admin scope required")
+    end
+  end
+
+  post "/v1/credentials" do
+    if Security.scope_authorized?(conn.assigns.credential, :admin) do
+      actor = conn.assigns.credential.credential_id
+      body = conn.body_params
+
+      with :ok <- validate_scopes(body["scopes"]),
+           {:ok, scopes} <- to_scopes(body["scopes"]) do
+        issued =
+          Security.issue(body["service_name"] || "", scopes,
+            actor_credential_id: actor,
+            allowed_event_types: body["allowed_event_types"]
+          )
+
+        send_json(conn, 201, %{
+          "credential_id" => issued.credential_id,
+          "token" => issued.token
+        })
+      else
+        {:error, reason} -> problem(conn, 400, "invalid_credential", reason)
+      end
+    else
+      problem(conn, 403, "missing_scope", "admin scope required")
+    end
+  end
+
+  post "/v1/credentials/:id/revoke" do
+    if Security.scope_authorized?(conn.assigns.credential, :admin) do
+      actor = conn.assigns.credential.credential_id
+
+      case Security.revoke(id, actor) do
+        :ok -> send_json(conn, 200, %{"status" => "revoked"})
+        {:error, :not_found} -> problem(conn, 404, "not_found", "unknown credential")
+      end
+    else
+      problem(conn, 403, "missing_scope", "admin scope required")
+    end
+  end
+
   get "/healthz" do
     send_json(conn, 200, %{"status" => "up"})
   end
@@ -288,6 +368,35 @@ defmodule AsnEventBroker.Web.Router do
       }
     end)
   end
+
+  defp validate_scopes(scopes) when is_list(scopes) do
+    known = ["publish", "consume", "admin"]
+
+    if scopes != [] and Enum.all?(scopes, &(&1 in known)) do
+      :ok
+    else
+      {:error, "scopes must be a non-empty subset of publish, consume, admin"}
+    end
+  end
+
+  defp validate_scopes(_), do: {:error, "scopes must be a non-empty list of known scopes"}
+
+  defp to_scopes(scopes), do: {:ok, Enum.map(scopes, &String.to_existing_atom/1)}
+
+  defp credential_view(credential) do
+    %{
+      "credential_id" => credential.credential_id,
+      "service_name" => credential.service_name,
+      "scopes" => Enum.map(credential.scopes, &to_string/1),
+      "allowed_event_types" => credential.allowed_event_types,
+      "expires_at" => timestamp(credential.expires_at),
+      "revoked_at" => timestamp(credential.revoked_at),
+      "created_at" => timestamp(credential.created_at)
+    }
+  end
+
+  defp timestamp(nil), do: nil
+  defp timestamp(%DateTime{} = dt), do: DateTime.to_iso8601(dt)
 
   defp subscription_view(sub) do
     %{
