@@ -9,6 +9,10 @@ communication.
 > documented in
 > [`docs/architecture/architecture-and-schema.md`](docs/architecture/architecture-and-schema.md).
 
+## Roadmap
+
+See [`ROADMAP.md`](ROADMAP.md) for the working roadmap, completed work, and next steps.
+
 ## Stack
 
 | Layer | Technology |

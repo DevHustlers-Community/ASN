@@ -234,6 +234,9 @@ subscriptions are paused, resumed, and re-filtered through
 For the full one-command verification loop, run `scripts/dev/broker-verify.sh`
 from the repository root.
 
+Performance baselines and the load-test harness are documented in
+[`docs/performance/broker-baseline.md`](../../docs/performance/broker-baseline.md).
+
 Verification loop:
 
 ```bash
