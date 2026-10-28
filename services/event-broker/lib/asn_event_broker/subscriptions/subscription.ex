@@ -27,6 +27,7 @@ defmodule AsnEventBroker.Subscriptions.Subscription do
     |> validate_length(:name, min: 1)
     |> validate_length(:consumer, min: 1)
     |> validate_number(:max_attempts, greater_than: 0)
+    |> reject_explicit_nil(attrs, :max_attempts, "must be an integer >= 1")
     |> validate_inclusion(:status, [:active, :paused])
     |> validate_change(:event_types, fn
       :event_types, nil ->
@@ -44,4 +45,20 @@ defmodule AsnEventBroker.Subscriptions.Subscription do
     end)
     |> unique_constraint(:name)
   end
+
+  # `cast/3` drops an explicit nil as "empty", so validate_number never sees
+  # it and the NOT NULL column would raise at the database instead. Reject the
+  # explicit nil in the changeset so the edge answers 409, not 500.
+  defp reject_explicit_nil(changeset, attrs, field, message) when is_map(attrs) do
+    keys = [field, to_string(field)]
+
+    if Enum.any?(keys, &Map.has_key?(attrs, &1)) and
+         Enum.all?(keys, &is_nil(Map.get(attrs, &1))) do
+      add_error(changeset, field, message)
+    else
+      changeset
+    end
+  end
+
+  defp reject_explicit_nil(changeset, _attrs, _field, _message), do: changeset
 end

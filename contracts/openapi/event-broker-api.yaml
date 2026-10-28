@@ -51,7 +51,9 @@ paths:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
         '400':
-          description: Invalid envelope.
+          description: >
+            Invalid envelope, including a malformed `occurred_at` timestamp or
+            missing required fields.
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
@@ -97,6 +99,7 @@ paths:
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
+        '400': { $ref: '#/components/responses/BadRequest' }
 
   /deliveries/{id}/ack:
     post:
@@ -121,6 +124,7 @@ paths:
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
+        '400': { $ref: '#/components/responses/BadRequest' }
 
   /deliveries/{id}/nack:
     post:
@@ -137,6 +141,7 @@ paths:
         '200': { description: Rescheduled or dead-lettered. }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/StaleLease' }
+        '400': { $ref: '#/components/responses/BadRequest' }
 
   /deliveries/{id}/extend:
     post:
@@ -153,6 +158,7 @@ paths:
         '200': { description: Lease extended. }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/StaleLease' }
+        '400': { $ref: '#/components/responses/BadRequest' }
 
   /deliveries/{id}/skip:
     post:
@@ -164,6 +170,7 @@ paths:
         '200': { description: Skipped (terminal). }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/StaleLease' }
+        '400': { $ref: '#/components/responses/BadRequest' }
 
   /deliveries:
     get:
@@ -179,6 +186,7 @@ paths:
           schema: { type: string }
         - name: limit
           in: query
+          description: Inspection page size; at most 200 (default 50).
           schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
       responses:
         '200':
@@ -191,6 +199,7 @@ paths:
                   deliveries:
                     type: array
                     items: { $ref: '#/components/schemas/DeadDelivery' }
+        '400': { $ref: '#/components/responses/BadRequest' }
 
   /dead-letters/replay:
     post:
@@ -210,6 +219,7 @@ paths:
         '200': { description: Replayed with a fresh attempt budget. }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/StaleLease' }
+        '400': { $ref: '#/components/responses/BadRequest' }
 
   /subscriptions:
     get:
@@ -303,7 +313,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/CredentialIssued' }
-        '400': { $ref: '#/components/responses/Conflict' }
+        '400': { $ref: '#/components/responses/BadRequest' }
 
   /credentials/{id}/revoke:
     post:
@@ -366,6 +376,11 @@ components:
           schema: { $ref: '#/components/schemas/Problem' }
     Conflict:
       description: Conflicting state (for example a duplicate subscription name).
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    BadRequest:
+      description: Missing or malformed request parameters.
       content:
         application/problem+json:
           schema: { $ref: '#/components/schemas/Problem' }
@@ -447,7 +462,7 @@ components:
         aggregate_version: { type: integer, nullable: true }
         attempts: { type: integer }
         last_error_kind: { type: string, nullable: true }
-        last_error_message: { type: string, nullable: true }
+        last_error_message: { type: string, nullable: true, maxLength: 500 }
         dead_lettered_at: { type: string, format: date-time }
     Subscription:
       type: object

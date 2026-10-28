@@ -83,6 +83,22 @@ defmodule AsnEventBroker.Events.EnvelopeTest do
     test "rejects a non-object envelope" do
       assert {:error, {:invalid_envelope, _}} = Envelope.validate("nope")
     end
+
+    test "rejects occurred_at values that are not ISO-8601 date-times" do
+      for value <- ["garbage", 123, "2026-13-45T99:00:00Z"] do
+        assert {:error, {:invalid_envelope, errors}} =
+                 Envelope.validate(valid_attrs(%{"occurred_at" => value}))
+
+        assert errors == ["field \"occurred_at\" must be an ISO-8601 date-time"]
+      end
+    end
+
+    test "accepts an ISO-8601 offset for occurred_at" do
+      assert {:ok, envelope} =
+               Envelope.validate(valid_attrs(%{"occurred_at" => "2026-10-25T12:00:00+02:00"}))
+
+      assert DateTime.diff(envelope.occurred_at, ~U[2026-10-25 10:00:00Z]) == 0
+    end
   end
 
   describe "content_hash/1" do

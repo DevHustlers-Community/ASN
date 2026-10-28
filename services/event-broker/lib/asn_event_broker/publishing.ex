@@ -14,7 +14,7 @@ defmodule AsnEventBroker.Publishing do
   """
 
   alias AsnEventBroker.{Repo, Routing, Telemetry, UUIDv7}
-  alias AsnEventBroker.Delivery.Delivery
+  alias AsnEventBroker.Delivery.{Delivery, Waiters}
   alias AsnEventBroker.Events.{Event, Envelope}
 
   @spec publish(map(), String.t()) ::
@@ -35,8 +35,7 @@ defmodule AsnEventBroker.Publishing do
         Repo.transaction(fn ->
           case insert_event(envelope, hash, publisher, received_at) do
             {:inserted, event} ->
-              fan_out(event, received_at)
-              :created
+              {:created, fan_out(event, received_at)}
 
             :conflict ->
               resolve_conflict(envelope, hash, publisher)
@@ -44,7 +43,12 @@ defmodule AsnEventBroker.Publishing do
         end)
 
       case outcome do
-        {:ok, :created} ->
+        {:ok, {:created, created}} ->
+          # Wake parked claims only after the fan-out transaction committed,
+          # and only when deliveries actually exist: an empty fan-out has
+          # nothing to wake for.
+          if created > 0, do: Waiters.wake_all()
+
           Telemetry.emit_count([:publish, :accepted], %{type: envelope.type, outcome: :created})
           {:ok, :created}
 
@@ -60,6 +64,10 @@ defmodule AsnEventBroker.Publishing do
           Telemetry.emit_count([:publish, :rejected], %{reason: :aggregate_version_taken})
           {:error, :aggregate_version_taken}
       end
+    else
+      {:error, {:invalid_envelope, _} = reason} ->
+        Telemetry.emit_count([:publish, :rejected], %{reason: :invalid_envelope})
+        {:error, reason}
     end
   end
 
@@ -114,8 +122,12 @@ defmodule AsnEventBroker.Publishing do
       |> Enum.map(&delivery_row(event, &1, now))
 
     case rows do
-      [] -> :ok
-      rows -> Repo.insert_all(Delivery, rows)
+      [] ->
+        0
+
+      rows ->
+        {count, _} = Repo.insert_all(Delivery, rows)
+        count
     end
   end
 

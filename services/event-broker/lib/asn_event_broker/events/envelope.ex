@@ -62,6 +62,10 @@ defmodule AsnEventBroker.Events.Envelope do
 
   def validate(_), do: {:error, {:invalid_envelope, ["envelope must be an object"]}}
 
+  @doc "True when a value matches the dotted lowercase event type pattern."
+  @spec type_valid?(term()) :: boolean()
+  def type_valid?(value), do: is_binary(value) and value =~ @type_regex
+
   @doc "SHA-256 over the canonical (recursively key-sorted JSON) full envelope."
   @spec content_hash(t()) :: String.t()
   def content_hash(%__MODULE__{} = envelope) do
@@ -129,6 +133,7 @@ defmodule AsnEventBroker.Events.Envelope do
       uuid_error("event_id", attrs["event_id"]),
       type_errors(attrs["type"]),
       version_errors("schema_version", attrs["schema_version"]),
+      occurred_at_errors(attrs["occurred_at"]),
       payload_errors(attrs["payload"]),
       trace_errors(attrs["trace_id"])
     ])
@@ -169,6 +174,19 @@ defmodule AsnEventBroker.Events.Envelope do
       do: [],
       else: ["field \"type\" must match the dotted lowercase event type pattern"]
   end
+
+  # `envelope/1` parses occurred_at with a match on `{:ok, _, _}`, so an
+  # unparseable value must be rejected here rather than raising there.
+  defp occurred_at_errors(nil), do: []
+
+  defp occurred_at_errors(value) when is_binary(value) do
+    case DateTime.from_iso8601(value) do
+      {:ok, _, _} -> []
+      _ -> ["field \"occurred_at\" must be an ISO-8601 date-time"]
+    end
+  end
+
+  defp occurred_at_errors(_), do: ["field \"occurred_at\" must be an ISO-8601 date-time"]
 
   defp aggregate_type_errors(value) do
     if is_binary(value) and value =~ @aggregate_type_regex,

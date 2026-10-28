@@ -15,13 +15,17 @@ defmodule AsnEventBroker.Web.Metrics do
   alias AsnEventBroker.Repo
 
   @table :asn_event_broker_metrics
+  @handler_id "asn-event-broker-metrics"
 
   @counter_events [
     {[:publish, :accepted], %{name: :publish_accepted_total, labels: [:type, :outcome]}},
     {[:publish, :rejected], %{name: :publish_rejected_total, labels: [:reason]}},
     {[:ack], %{name: :acks_total, labels: []}},
+    {[:nack], %{name: :nacks_total, labels: []}},
     {[:dead_letter], %{name: :dead_lettered_total, labels: []}},
     {[:lease_expired], %{name: :lease_expired_total, labels: []}},
+    {[:replay], %{name: :replays_total, labels: []}},
+    {[:skip], %{name: :skips_total, labels: []}},
     {[:retention_purge], %{name: :retention_purged_total, labels: []}}
   ]
 
@@ -32,17 +36,17 @@ defmodule AsnEventBroker.Web.Metrics do
     :ets.new(@table, [:named_table, :set, :public, read_concurrency: true])
 
     :telemetry.attach_many(
-      "asn-event-broker-metrics",
+      @handler_id,
       Enum.map(@counter_events, fn {event, _} -> [:asn_event_broker | event] end),
       &__MODULE__.handle_event/4,
-      nil
+      @handler_id
     )
 
     {:ok, %{}}
   end
 
   @doc "Telemetry handler; attached once by this process."
-  def handle_event([:asn_event_broker | event], measurements, metadata, _nil) do
+  def handle_event([:asn_event_broker | event], measurements, metadata, handler_id) do
     case Enum.find(@counter_events, fn {e, _} -> e == event end) do
       {_, %{name: name, labels: label_keys}} ->
         labels =
@@ -62,6 +66,12 @@ defmodule AsnEventBroker.Web.Metrics do
       nil ->
         :ok
     end
+  rescue
+    ArgumentError ->
+      # The metrics table can be gone while a handler is still attached (for
+      # example during shutdown). Detach rather than crash the emitter.
+      if handler_id, do: :telemetry.detach(handler_id)
+      :ok
   end
 
   @doc "Renders the Prometheus text exposition."
@@ -97,16 +107,16 @@ defmodule AsnEventBroker.Web.Metrics do
   end
 
   defp render_gauges do
-    now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
+    %{pending: pending, leased: leased, dead: dead, oldest_pending: oldest} = gauge_state()
 
     [
-      gauge("pending", "pending deliveries", gauge_count(:pending)),
-      gauge("leased", "in-flight (leased) deliveries", gauge_count(:leased)),
-      gauge("dead", "dead deliveries awaiting replay or skip", gauge_count(:dead)),
+      gauge("pending", "pending deliveries", pending),
+      gauge("leased", "in-flight (leased) deliveries", leased),
+      gauge("dead", "dead deliveries awaiting replay or skip", dead),
       gauge(
         "oldest_pending_seconds",
         "age of the oldest pending delivery",
-        oldest_pending_age(now) || 0
+        oldest_pending_age(oldest)
       )
     ]
   end
@@ -115,22 +125,31 @@ defmodule AsnEventBroker.Web.Metrics do
     "# TYPE asn_event_broker_#{name} gauge\n# HELP asn_event_broker_#{name} #{help}\nasn_event_broker_#{name} #{value}\n"
   end
 
-  defp gauge_count(state) do
-    Repo.one!(from d in Delivery, where: d.state == ^state, select: count())
+  # One round trip per scrape; FILTER aggregates return all four values.
+  defp gauge_state do
+    Repo.one!(
+      from d in Delivery,
+        select: %{
+          pending: filter(count(d.id), d.state == :pending),
+          leased: filter(count(d.id), d.state == :leased),
+          dead: filter(count(d.id), d.state == :dead),
+          oldest_pending: filter(min(d.created_at), d.state == :pending)
+        }
+    )
   end
 
-  defp oldest_pending_age(now) do
-    case Repo.one!(
-           from d in Delivery,
-             where: d.state == :pending,
-             select: max(d.created_at)
-         ) do
-      nil -> nil
-      %DateTime{} = oldest -> DateTime.diff(now, oldest)
-    end
+  defp oldest_pending_age(nil), do: 0
+
+  defp oldest_pending_age(%DateTime{} = oldest) do
+    now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
+    DateTime.diff(now, oldest)
   end
 
-  defp escape(value), do: String.replace(value, "\\\"", "\\\\\\\"")
+  defp escape(value) do
+    value
+    |> String.replace("\\", "\\\\")
+    |> String.replace("\"", "\\\"")
+  end
 
   defp label_value(nil), do: "unknown"
   defp label_value(value) when is_atom(value), do: to_string(value)

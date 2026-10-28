@@ -5,9 +5,11 @@ defmodule AsnEventBroker.Retention do
   Retention is a deletion policy; replay availability is defined separately.
   Delivered deliveries purge after 24 hours, dead and skipped after 30 days.
   An event purges only past the 7-day event-log floor AND when no delivery
-  referencing it is non-terminal or within its own retention window — events
-  backing live dead letters survive the full dead-letter window, so replay
-  always finds its payload. Purges run in batches.
+  referencing it is non-terminal or within its own retention window — each
+  terminal state is compared against its own cutoff (delivered 24 h, dead and
+  skipped 30 days), not the event-log floor — so events backing live dead
+  letters survive the full dead-letter window and replay always finds its
+  payload. Purges run in batches.
   """
 
   alias AsnEventBroker.{Repo, Telemetry}
@@ -43,12 +45,12 @@ defmodule AsnEventBroker.Retention do
         WHERE d.event_id = e.event_id
           AND (
             d.state IN ('pending', 'leased')
-            OR (d.state = 'delivered' AND d.delivered_at > $1)
-            OR (d.state = 'dead' AND d.dead_lettered_at > $1)
-            OR (d.state = 'skipped' AND d.skipped_at > $1)
+            OR (d.state = 'delivered' AND d.delivered_at > $2)
+            OR (d.state = 'dead' AND d.dead_lettered_at > $3)
+            OR (d.state = 'skipped' AND d.skipped_at > $3)
           )
       )
-    LIMIT $2
+    LIMIT $4
   )
   """
 
@@ -65,7 +67,14 @@ defmodule AsnEventBroker.Retention do
 
     delivered = delete_in_batches(@purge_delivered_sql, [cutoff_delivered, batch_size])
     terminal = delete_in_batches(@purge_terminal_sql, [cutoff_terminal, batch_size])
-    events = delete_in_batches(@purge_events_sql, [cutoff_events, batch_size])
+
+    events =
+      delete_in_batches(@purge_events_sql, [
+        cutoff_events,
+        cutoff_delivered,
+        cutoff_terminal,
+        batch_size
+      ])
 
     Telemetry.emit([:retention_purge], %{count: delivered + terminal + events}, %{
       delivered: delivered,

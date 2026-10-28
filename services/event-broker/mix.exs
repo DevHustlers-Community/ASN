@@ -29,7 +29,7 @@ defmodule AsnEventBroker.MixProject do
       {:postgrex, "~> 0.22"},
       {:jason, "~> 1.4"},
       {:plug, "~> 1.16"},
-      {:bandit, "~> 1.13"},
+      {:bandit, "~> 1.14"},
       {:telemetry, "~> 1.2"},
       {:stream_data, "~> 1.1", only: :test}
     ]

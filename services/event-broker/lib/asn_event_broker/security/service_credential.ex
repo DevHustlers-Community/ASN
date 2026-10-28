@@ -9,6 +9,8 @@ defmodule AsnEventBroker.Security.ServiceCredential do
   use Ecto.Schema
   import Ecto.Changeset
 
+  alias AsnEventBroker.Events.Envelope
+
   @primary_key {:credential_id, Ecto.UUID, autogenerate: false}
   @foreign_key_type Ecto.UUID
   schema "service_credentials" do
@@ -47,6 +49,17 @@ defmodule AsnEventBroker.Security.ServiceCredential do
 
       :scopes, _ ->
         [scopes: "must be a list of scopes"]
+    end)
+    |> validate_change(:allowed_event_types, fn
+      :allowed_event_types, types when is_list(types) ->
+        if types != [] and Enum.all?(types, &Envelope.type_valid?/1) do
+          []
+        else
+          [allowed_event_types: "must be a non-empty list of dotted lowercase event types"]
+        end
+
+      :allowed_event_types, _ ->
+        [allowed_event_types: "must be a list of dotted lowercase event types"]
     end)
   end
 end

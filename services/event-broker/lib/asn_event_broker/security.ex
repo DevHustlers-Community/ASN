@@ -10,41 +10,60 @@ defmodule AsnEventBroker.Security do
   """
 
   import Ecto.Query
+  require Logger
 
   alias AsnEventBroker.{Audit, Repo, UUIDv7}
   alias AsnEventBroker.Security.ServiceCredential
 
   @admin_scopes [:publish, :consume, :admin]
 
-  @spec issue(String.t(), [atom()], keyword()) :: %{credential_id: String.t(), token: String.t()}
+  @doc """
+  Issues a credential and its audit entry in one transaction.
+
+  Validation failures (for example a blank `service_name` or an empty
+  `allowed_event_types`) return `{:error, changeset}` so the edge can answer
+  400 instead of crashing.
+  """
+  @spec issue(String.t(), [atom()], keyword()) ::
+          {:ok, %{credential_id: String.t(), token: String.t()}}
+          | {:error, Ecto.Changeset.t()}
   def issue(service_name, scopes, opts \\ []) do
     token = :crypto.strong_rand_bytes(32) |> Base.url_encode64(padding: false)
+    allowed_event_types = Keyword.get(opts, :allowed_event_types)
 
-    credential =
+    changeset =
       %ServiceCredential{}
       |> ServiceCredential.changeset(%{
         credential_id: UUIDv7.generate(),
         service_name: service_name,
         token_hash: hash(token),
         scopes: scopes,
-        allowed_event_types: Keyword.get(opts, :allowed_event_types)
+        allowed_event_types: allowed_event_types
       })
-      |> Repo.insert!()
 
     # Audited per ADR 0008 §9. The plaintext token is never recorded; the
-    # bootstrap credential (no actor yet) is its own audit actor.
-    Audit.record(
-      Keyword.get(opts, :actor_credential_id) || credential.credential_id,
-      "credential.create",
-      "credential:" <> credential.credential_id,
-      %{
-        "service_name" => service_name,
-        "scopes" => Enum.map(scopes, &to_string/1),
-        "allowed_event_types" => Keyword.get(opts, :allowed_event_types)
-      }
-    )
+    # bootstrap credential (no actor yet) is its own audit actor. The insert
+    # and its audit entry commit together or not at all.
+    Repo.transaction(fn ->
+      case Repo.insert(changeset) do
+        {:ok, credential} ->
+          Audit.record(
+            Keyword.get(opts, :actor_credential_id) || credential.credential_id,
+            "credential.create",
+            "credential:" <> credential.credential_id,
+            %{
+              "service_name" => service_name,
+              "scopes" => Enum.map(scopes, &to_string/1),
+              "allowed_event_types" => allowed_event_types
+            }
+          )
 
-    %{credential_id: credential.credential_id, token: token}
+          %{credential_id: credential.credential_id, token: token}
+
+        {:error, changeset} ->
+          Repo.rollback(changeset)
+      end
+    end)
   end
 
   @doc "Seeds the first admin credential when the credentials table is empty."
@@ -55,9 +74,29 @@ defmodule AsnEventBroker.Security do
     if is_binary(token) and token != "" do
       case Repo.aggregate(ServiceCredential, :count) do
         0 ->
-          admin = issue("asn-admin", @admin_scopes, opts_for_bootstrap(token))
-          seed_token(admin.credential_id, token)
-          :seeded
+          # The generated-hash insert and the environment-token rewrite (plus
+          # their audit entry) are one transaction: a bootstrap credential
+          # never exists without its audit record.
+          Repo.transaction(fn ->
+            case issue("asn-admin", @admin_scopes, opts_for_bootstrap(token)) do
+              {:ok, admin} ->
+                seed_token(admin.credential_id, token)
+                :seeded
+
+              {:error, changeset} ->
+                Repo.rollback(changeset)
+            end
+          end)
+          |> case do
+            {:ok, :seeded} ->
+              :seeded
+
+            {:error, changeset} ->
+              errors = Ecto.Changeset.traverse_errors(changeset, fn {msg, _} -> msg end)
+              Logger.warning("broker admin bootstrap failed: " <> inspect(errors))
+
+              :exists
+          end
 
         _ ->
           :exists
@@ -118,24 +157,35 @@ defmodule AsnEventBroker.Security do
       do: type in types
 
   @doc "Marks a credential revoked (admin rotation/revocation), with an audit entry."
-  @spec revoke(String.t(), String.t()) :: :ok | {:error, :not_found}
+  @spec revoke(String.t(), String.t()) :: :ok | {:error, :not_found} | {:error, term()}
   def revoke(credential_id, actor_credential_id) do
     case Repo.get(ServiceCredential, credential_id) do
       nil ->
         {:error, :not_found}
 
       credential ->
-        credential
-        |> Ecto.Changeset.change(
-          revoked_at: DateTime.utc_now() |> DateTime.truncate(:microsecond)
-        )
-        |> Repo.update!()
+        # The revocation and its audit entry commit together or not at all.
+        case Repo.transaction(fn ->
+               credential
+               |> Ecto.Changeset.change(
+                 revoked_at: DateTime.utc_now() |> DateTime.truncate(:microsecond)
+               )
+               |> Repo.update!()
 
-        Audit.record(actor_credential_id, "credential.revoke", "credential:" <> credential_id, %{
-          "service_name" => credential.service_name
-        })
+               Audit.record(
+                 actor_credential_id,
+                 "credential.revoke",
+                 "credential:" <> credential_id,
+                 %{
+                   "service_name" => credential.service_name
+                 }
+               )
 
-        :ok
+               :ok
+             end) do
+          {:ok, :ok} -> :ok
+          {:error, reason} -> {:error, reason}
+        end
     end
   end
 

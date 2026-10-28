@@ -269,8 +269,26 @@ defmodule AsnEventBroker.DeliveryTest do
       "payload" => %{}
     }
 
+    started = System.monotonic_time(:millisecond)
     assert {:ok, :created} = Publishing.publish(attrs, "social-api")
-
     assert {:ok, [_]} = Task.await(task)
+    assert System.monotonic_time(:millisecond) - started < 400
+  end
+
+  test "publishing with no eligible subscriptions does not wait for waiters" do
+    insert_subscription("chat-filtered", event_types: ["report.created"])
+
+    attrs = %{
+      "event_id" => Ecto.UUID.generate(),
+      "type" => "user.created",
+      "schema_version" => 1,
+      "occurred_at" => "2026-10-25T10:00:00Z",
+      "payload" => %{}
+    }
+
+    started = System.monotonic_time(:millisecond)
+    assert {:ok, :created} = Publishing.publish(attrs, "social-api")
+    assert System.monotonic_time(:millisecond) - started < 400
+    assert Repo.all(AsnEventBroker.Delivery.Delivery) == []
   end
 end

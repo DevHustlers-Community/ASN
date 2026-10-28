@@ -18,6 +18,7 @@ defmodule AsnEventBroker.Web.Router do
 
   alias AsnEventBroker.{Audit, DeadLetter, Delivery, Publishing, Repo, Security}
   alias AsnEventBroker.Acknowledgements
+  alias AsnEventBroker.Events.Envelope
   alias AsnEventBroker.Security.ServiceCredential
   alias AsnEventBroker.Subscriptions.Subscription
 
@@ -70,9 +71,6 @@ defmodule AsnEventBroker.Web.Router do
 
         {:error, :event_type_forbidden} ->
           problem(conn, 403, "event_type_forbidden", "credential may not publish this event type")
-
-        _ ->
-          problem(conn, 500, "internal", "unexpected publish result")
       end
     else
       problem(conn, 403, "missing_scope", "publish scope required")
@@ -81,18 +79,21 @@ defmodule AsnEventBroker.Web.Router do
 
   post "/v1/subscriptions/:name/claims" do
     if Security.scope_authorized?(conn.assigns.credential, :consume) do
-      max = body_int(conn.body_params["max"], 10)
-      wait_ms = min(body_int(conn.body_params["wait_ms"], 0), delivery_cfg(:long_poll_max_ms))
+      case claim_params(conn.body_params) do
+        {:ok, max, wait_ms} ->
+          case Delivery.claim(name, max, wait_ms) do
+            {:ok, deliveries} ->
+              send_json(conn, 200, %{"deliveries" => with_event_payloads(deliveries)})
 
-      case Delivery.claim(name, max, wait_ms) do
-        {:ok, deliveries} ->
-          send_json(conn, 200, %{"deliveries" => with_event_payloads(deliveries)})
+            {:error, :paused} ->
+              problem(conn, 409, "subscription_paused", "subscription is paused")
 
-        {:error, :paused} ->
-          problem(conn, 409, "subscription_paused", "subscription is paused")
+            {:error, :not_found} ->
+              problem(conn, 404, "not_found", "unknown subscription")
+          end
 
-        {:error, :not_found} ->
-          problem(conn, 404, "not_found", "unknown subscription")
+        {:error, detail} ->
+          problem(conn, 400, "invalid_request", detail)
       end
     else
       problem(conn, 403, "missing_scope", "consume scope required")
@@ -100,26 +101,38 @@ defmodule AsnEventBroker.Web.Router do
   end
 
   post "/v1/deliveries/:id/ack" do
-    consume_action(conn, fn -> Acknowledgements.ack(id, conn.body_params["lease_token"]) end)
+    delivery_action(conn, id, fn delivery_id ->
+      consume_action(conn, fn ->
+        Acknowledgements.ack(delivery_id, conn.body_params["lease_token"])
+      end)
+    end)
   end
 
   post "/v1/deliveries/:id/nack" do
-    consume_action(conn, fn ->
-      Acknowledgements.nack(
-        id,
-        conn.body_params["lease_token"],
-        conn.body_params["error_kind"],
-        conn.body_params["error_message"]
-      )
+    delivery_action(conn, id, fn delivery_id ->
+      consume_action(conn, fn ->
+        Acknowledgements.nack(
+          delivery_id,
+          conn.body_params["lease_token"],
+          conn.body_params["error_kind"],
+          conn.body_params["error_message"]
+        )
+      end)
     end)
   end
 
   post "/v1/deliveries/:id/extend" do
-    consume_action(conn, fn -> Acknowledgements.extend(id, conn.body_params["lease_token"]) end)
+    delivery_action(conn, id, fn delivery_id ->
+      consume_action(conn, fn ->
+        Acknowledgements.extend(delivery_id, conn.body_params["lease_token"])
+      end)
+    end)
   end
 
   post "/v1/deliveries/:id/skip" do
-    admin_action(conn, fn actor -> DeadLetter.skip(id, actor) end)
+    delivery_action(conn, id, fn delivery_id ->
+      admin_action(conn, fn actor -> DeadLetter.skip(delivery_id, actor) end)
+    end)
   end
 
   get "/v1/deliveries" do
@@ -127,11 +140,15 @@ defmodule AsnEventBroker.Web.Router do
       state = conn.params["state"]
 
       if state == "dead" do
-        limit = body_int(conn.params["limit"], 50)
+        case body_int(conn.params["limit"], 50) do
+          {:ok, limit} when limit in 1..200 ->
+            send_json(conn, 200, %{
+              "deliveries" => DeadLetter.list_dead(conn.params["subscription"], limit)
+            })
 
-        send_json(conn, 200, %{
-          "deliveries" => DeadLetter.list_dead(conn.params["subscription"], limit)
-        })
+          _ ->
+            problem(conn, 400, "invalid_request", "limit must be an integer between 1 and 200")
+        end
       else
         problem(conn, 400, "unsupported_filter", "only state=dead inspection is available")
       end
@@ -141,7 +158,12 @@ defmodule AsnEventBroker.Web.Router do
   end
 
   post "/v1/dead-letters/replay" do
-    admin_action(conn, fn actor -> DeadLetter.replay(conn.body_params["delivery_id"], actor) end)
+    admin_action(conn, fn actor ->
+      case parse_uuid(conn.body_params["delivery_id"]) do
+        {:ok, delivery_id} -> DeadLetter.replay(delivery_id, actor)
+        :error -> {:error, :invalid_request}
+      end
+    end)
   end
 
   get "/v1/subscriptions" do
@@ -185,14 +207,23 @@ defmodule AsnEventBroker.Web.Router do
           problem(conn, 404, "not_found", "unknown subscription")
 
         subscription ->
-          case subscription |> Subscription.changeset(attrs) |> Repo.update() do
-            {:ok, updated} ->
-              Audit.record(actor, "subscription.update", "subscription:" <> name, %{
-                "status" => attrs["status"],
-                "event_types" => attrs["event_types"],
-                "max_attempts" => attrs["max_attempts"]
-              })
+          # The update and its audit entry commit together or not at all.
+          case Repo.transaction(fn ->
+                 case subscription |> Subscription.changeset(attrs) |> Repo.update() do
+                   {:ok, updated} ->
+                     Audit.record(actor, "subscription.update", "subscription:" <> name, %{
+                       "status" => attrs["status"],
+                       "event_types" => attrs["event_types"],
+                       "max_attempts" => attrs["max_attempts"]
+                     })
 
+                     updated
+
+                   {:error, changeset} ->
+                     Repo.rollback(changeset)
+                 end
+               end) do
+            {:ok, updated} ->
               send_json(conn, 200, subscription_view(updated))
 
             {:error, changeset} ->
@@ -223,16 +254,19 @@ defmodule AsnEventBroker.Web.Router do
 
       with :ok <- validate_scopes(body["scopes"]),
            {:ok, scopes} <- to_scopes(body["scopes"]) do
-        issued =
-          Security.issue(body["service_name"] || "", scopes,
-            actor_credential_id: actor,
-            allowed_event_types: body["allowed_event_types"]
-          )
+        case Security.issue(body["service_name"] || "", scopes,
+               actor_credential_id: actor,
+               allowed_event_types: body["allowed_event_types"]
+             ) do
+          {:ok, issued} ->
+            send_json(conn, 201, %{
+              "credential_id" => issued.credential_id,
+              "token" => issued.token
+            })
 
-        send_json(conn, 201, %{
-          "credential_id" => issued.credential_id,
-          "token" => issued.token
-        })
+          {:error, changeset} ->
+            problem(conn, 400, "invalid_credential", format_changeset(changeset))
+        end
       else
         {:error, reason} -> problem(conn, 400, "invalid_credential", reason)
       end
@@ -245,9 +279,22 @@ defmodule AsnEventBroker.Web.Router do
     if Security.scope_authorized?(conn.assigns.credential, :admin) do
       actor = conn.assigns.credential.credential_id
 
-      case Security.revoke(id, actor) do
-        :ok -> send_json(conn, 200, %{"status" => "revoked"})
-        {:error, :not_found} -> problem(conn, 404, "not_found", "unknown credential")
+      case parse_uuid(id) do
+        {:ok, credential_id} ->
+          case Security.revoke(credential_id, actor) do
+            :ok ->
+              send_json(conn, 200, %{"status" => "revoked"})
+
+            {:error, :not_found} ->
+              problem(conn, 404, "not_found", "unknown credential")
+
+            {:error, reason} ->
+              Logger.error("credential revoke failed: " <> inspect(reason))
+              problem(conn, 500, "internal", "internal error")
+          end
+
+        :error ->
+          problem(conn, 404, "not_found", "unknown credential")
       end
     else
       problem(conn, 403, "missing_scope", "admin scope required")
@@ -280,10 +327,27 @@ defmodule AsnEventBroker.Web.Router do
   defp publish(params, credential) do
     type = params["type"]
 
-    if is_binary(type) and Security.event_type_authorized?(credential, type) do
-      Publishing.publish(params, credential.service_name)
-    else
+    # A structurally invalid (or missing) type is Publishing's 400, not a
+    # 403: the credential allow-list is only consulted for a well-formed
+    # event type. Authorized types still go through Publishing unchanged.
+    if Envelope.type_valid?(type) and not Security.event_type_authorized?(credential, type) do
       {:error, :event_type_forbidden}
+    else
+      Publishing.publish(params, credential.service_name)
+    end
+  end
+
+  defp delivery_action(conn, raw_id, fun) do
+    case parse_uuid(raw_id) do
+      {:ok, delivery_id} -> fun.(delivery_id)
+      :error -> problem(conn, 404, "not_found", "unknown delivery")
+    end
+  end
+
+  defp parse_uuid(value) do
+    case Ecto.UUID.cast(value) do
+      {:ok, uuid} -> {:ok, uuid}
+      :error -> :error
     end
   end
 
@@ -497,17 +561,30 @@ defmodule AsnEventBroker.Web.Router do
     |> send_resp(status, Jason.encode!(body))
   end
 
-  defp body_int(nil, default), do: default
-  defp body_int(value, _default) when is_integer(value) and value >= 0, do: value
-
-  defp body_int(value, _default) when is_binary(value) do
-    case Integer.parse(value) do
-      {int, ""} when int >= 0 -> int
-      _ -> 0
+  defp claim_params(params) do
+    with {:ok, max} <- body_int(params["max"], 10),
+         {:ok, wait_ms} <- body_int(params["wait_ms"], 0) do
+      if max < 1 do
+        {:error, "max must be at least 1"}
+      else
+        {:ok, max, min(wait_ms, delivery_cfg(:long_poll_max_ms))}
+      end
+    else
+      {:error, :bad_integer} -> {:error, "max and wait_ms must be non-negative integers"}
     end
   end
 
-  defp body_int(_, default), do: default
+  defp body_int(nil, default), do: {:ok, default}
+  defp body_int(value, _default) when is_integer(value) and value >= 0, do: {:ok, value}
+
+  defp body_int(value, _default) when is_binary(value) do
+    case Integer.parse(value) do
+      {int, ""} when int >= 0 -> {:ok, int}
+      _ -> {:error, :bad_integer}
+    end
+  end
+
+  defp body_int(_, _default), do: {:error, :bad_integer}
 
   defp delivery_cfg(key),
     do: Keyword.fetch!(Application.fetch_env!(:asn_event_broker, :delivery), key)

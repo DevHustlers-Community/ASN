@@ -18,8 +18,10 @@ defmodule AsnEventBroker.Delivery.Waiters do
 
   @impl true
   def init(_opts) do
-    {:ok, _pid} = :pg.start_link(@scope)
-    {:ok, %{}}
+    case :pg.start_link(@scope) do
+      {:ok, _pid} -> {:ok, %{}}
+      {:error, {:already_started, _pid}} -> {:ok, %{}}
+    end
   end
 
   @doc "Registers the calling process for wakeup on the next publish."

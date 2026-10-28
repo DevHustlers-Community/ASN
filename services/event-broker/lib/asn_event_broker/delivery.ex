@@ -27,14 +27,14 @@ defmodule AsnEventBroker.Delivery do
   SET state = 'leased',
       attempts = d.attempts + 1,
       lease_token_hash = $1,
-      lease_expires_at = $2,
+      lease_expires_at = clock_timestamp() + ($2 * interval '1 second'),
       updated_at = $3
   WHERE d.id = (
     SELECT c.id
     FROM deliveries c
     WHERE c.subscription_id = $4
       AND c.state = 'pending'
-      AND (c.next_attempt_at IS NULL OR c.next_attempt_at <= $3)
+      AND (c.next_attempt_at IS NULL OR c.next_attempt_at <= clock_timestamp())
       AND (
         c.aggregate_type IS NULL
         OR NOT EXISTS (
@@ -110,11 +110,10 @@ defmodule AsnEventBroker.Delivery do
   defp lease_batch(subscription, max, remaining, acc) do
     now = utc_now()
     token = :crypto.strong_rand_bytes(32) |> Base.url_encode64(padding: false)
-    lease_expires_at = DateTime.add(now, delivery_cfg(:lease_seconds), :second)
 
     case Repo.query!(@claim_sql, [
            hash(token),
-           lease_expires_at,
+           delivery_cfg(:lease_seconds),
            now,
            uuid(subscription.id)
          ]) do

@@ -11,7 +11,7 @@ defmodule AsnEventBroker.DeadLetter do
 
   import Ecto.Query
 
-  alias AsnEventBroker.{Audit, Repo}
+  alias AsnEventBroker.{Audit, Repo, Telemetry}
   alias AsnEventBroker.Delivery.Delivery
   alias AsnEventBroker.Events.Event
   alias AsnEventBroker.Subscriptions.Subscription
@@ -87,19 +87,29 @@ defmodule AsnEventBroker.DeadLetter do
   end
 
   defp transition(delivery_id, actor_credential_id, action, sql, result) do
+    case Ecto.UUID.cast(delivery_id) do
+      {:ok, uuid} ->
+        do_transition(uuid, actor_credential_id, action, sql, result)
+
+      :error ->
+        {:error, :not_found}
+    end
+  end
+
+  defp do_transition(uuid, actor_credential_id, action, sql, result) do
     now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
 
     Repo.transaction(fn ->
-      case Repo.query!(sql, [Ecto.UUID.dump!(delivery_id), now]) do
+      case Repo.query!(sql, [Ecto.UUID.dump!(uuid), now]) do
         %{num_rows: 1} ->
-          Audit.record(actor_credential_id, action, "delivery:" <> delivery_id, %{
-            "delivery_id" => delivery_id
+          Audit.record(actor_credential_id, action, "delivery:" <> uuid, %{
+            "delivery_id" => uuid
           })
 
           result
 
         %{num_rows: 0} ->
-          if Repo.get(Delivery, delivery_id) do
+          if Repo.get(Delivery, uuid) do
             Repo.rollback(:not_dead)
           else
             Repo.rollback(:not_found)
@@ -107,8 +117,15 @@ defmodule AsnEventBroker.DeadLetter do
       end
     end)
     |> case do
-      {:ok, result} -> {:ok, result}
-      {:error, reason} -> {:error, reason}
+      {:ok, result} ->
+        Telemetry.emit_count(transition_event(result), %{})
+        {:ok, result}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
+
+  defp transition_event(:replayed), do: [:replay]
+  defp transition_event(:skipped), do: [:skip]
 end

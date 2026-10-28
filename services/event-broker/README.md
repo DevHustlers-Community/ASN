@@ -269,9 +269,11 @@ first admin credential at first boot once credential storage exists.
 
 ## Tests
 
-Current coverage verifies that the OTP application is defined. Database-backed
-delivery, retry, dead-letter, and restart tests are added with the event schema
-and storage implementation. Required failure paths are listed in
+Current coverage exercises envelope validation, idempotent publish and fan-out,
+claim/lease/ack/nack/extend semantics, dead-letter replay and skip, retention
+purges, credential authorization, the HTTP edge, Prometheus metrics, and
+property-based concurrency. Database-backed tests run against a real
+PostgreSQL instance. Required failure paths are listed in
 [`AGENTS.md`](../../AGENTS.md#7-verification).
 
 ## Related

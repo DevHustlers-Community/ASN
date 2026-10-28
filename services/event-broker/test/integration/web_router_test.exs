@@ -5,7 +5,7 @@ defmodule AsnEventBroker.Web.RouterTest do
 
   @router AsnEventBroker.Web.Router
 
-  def issue(scopes, opts \\ []), do: Security.issue("test-service", scopes, opts)
+  def issue(scopes, opts \\ []), do: Security.issue("test-service", scopes, opts) |> elem(1)
 
   def call(method, path, credential_token, body \\ nil) do
     headers =
@@ -104,7 +104,9 @@ defmodule AsnEventBroker.Web.RouterTest do
 
   test "credentials restricted to event types cannot publish outside the allow-list" do
     restricted =
-      Security.issue("social-api", [:publish], allowed_event_types: ["report.created"]).token
+      Security.issue("social-api", [:publish], allowed_event_types: ["report.created"])
+      |> elem(1)
+      |> Map.fetch!(:token)
 
     assert %{status: 403} =
              call("POST", "/v1/events", restricted, publish_body(Ecto.UUID.generate()))
@@ -328,6 +330,129 @@ defmodule AsnEventBroker.Web.RouterTest do
                "service_name" => "x",
                "scopes" => ["publish", "root"]
              })
+  end
+
+  test "publish missing or malformed type is a 400, not a 403" do
+    restricted =
+      Security.issue("social-api", [:publish], allowed_event_types: ["report.created"])
+      |> elem(1)
+      |> Map.fetch!(:token)
+
+    # Missing type: the envelope validator's 400 wins over the allow-list.
+    body = publish_body(Ecto.UUID.generate()) |> Map.delete("type")
+    conn = call("POST", "/v1/events", restricted, body)
+    assert conn.status == 400
+    assert %{"code" => "invalid_envelope"} = Jason.decode!(conn.resp_body)
+
+    # Structurally invalid type: also 400.
+    body = publish_body(Ecto.UUID.generate()) |> Map.put("type", "Not.AnEvent")
+    conn = call("POST", "/v1/events", restricted, body)
+    assert conn.status == 400
+    assert %{"code" => "invalid_envelope"} = Jason.decode!(conn.resp_body)
+
+    # Structurally valid but unlisted: 403.
+    conn = call("POST", "/v1/events", restricted, publish_body(Ecto.UUID.generate()))
+    assert conn.status == 403
+    assert %{"code" => "event_type_forbidden"} = Jason.decode!(conn.resp_body)
+  end
+
+  test "claim max and delivery limit reject malformed or out-of-range values" do
+    admin = issue([:publish, :consume, :admin]).token
+
+    assert %{status: 201} =
+             call("POST", "/v1/subscriptions", admin, %{
+               "name" => "bounds-sub",
+               "consumer" => "chat-service"
+             })
+
+    for bad_max <- ["abc", 0] do
+      conn =
+        call("POST", "/v1/subscriptions/bounds-sub/claims", admin, %{
+          "max" => bad_max,
+          "wait_ms" => 0
+        })
+
+      assert conn.status == 400
+      assert %{"code" => "invalid_request"} = Jason.decode!(conn.resp_body)
+    end
+
+    for bad_limit <- ["201", 0, "abc"] do
+      conn = call("GET", "/v1/deliveries?state=dead&limit=#{bad_limit}", admin, nil)
+      assert conn.status == 400
+      assert %{"code" => "invalid_request"} = Jason.decode!(conn.resp_body)
+    end
+
+    assert %{status: 200} = call("GET", "/v1/deliveries?state=dead&limit=200", admin, nil)
+  end
+
+  test "ack and nack reject malformed ids and missing lease tokens without crashing" do
+    admin = issue([:publish, :consume, :admin]).token
+
+    conn = call("POST", "/v1/deliveries/not-a-uuid/ack", admin, %{"lease_token" => "token"})
+    assert conn.status == 404
+    assert %{"code" => "not_found"} = Jason.decode!(conn.resp_body)
+
+    conn = call("POST", "/v1/deliveries/not-a-uuid/nack", admin, %{"lease_token" => "token"})
+    assert conn.status == 404
+
+    conn = call("POST", "/v1/deliveries/#{Ecto.UUID.generate()}/ack", admin, %{})
+    assert conn.status == 400
+    assert %{"code" => "invalid_request"} = Jason.decode!(conn.resp_body)
+
+    conn = call("POST", "/v1/deliveries/#{Ecto.UUID.generate()}/extend", admin, %{})
+    assert conn.status == 400
+  end
+
+  test "replay with a missing or malformed delivery_id is a 400" do
+    admin = issue([:admin]).token
+
+    for body <- [%{"delivery_id" => nil}, %{}, %{"delivery_id" => "nope"}] do
+      conn = call("POST", "/v1/dead-letters/replay", admin, body)
+      assert conn.status == 400
+      assert %{"code" => "invalid_request"} = Jason.decode!(conn.resp_body)
+    end
+  end
+
+  test "credential issuance rejects a blank service_name and empty allow-lists" do
+    admin = issue([:admin]).token
+
+    for body <- [
+          %{"service_name" => "", "scopes" => ["publish"]},
+          %{"service_name" => "social-api", "scopes" => ["publish"], "allowed_event_types" => []},
+          %{
+            "service_name" => "social-api",
+            "scopes" => ["publish"],
+            "allowed_event_types" => ["NOT.A.TYPE"]
+          }
+        ] do
+      conn = call("POST", "/v1/credentials", admin, body)
+      assert conn.status == 400
+      assert %{"code" => "invalid_credential"} = Jason.decode!(conn.resp_body)
+    end
+  end
+
+  test "subscriptions reject an explicit null max_attempts with 409" do
+    admin = issue([:admin]).token
+
+    assert %{status: 201} =
+             call("POST", "/v1/subscriptions", admin, %{
+               "name" => "null-budget",
+               "consumer" => "chat-service"
+             })
+
+    conn =
+      call("POST", "/v1/subscriptions", admin, %{
+        "name" => "null-budget-2",
+        "consumer" => "chat-service",
+        "max_attempts" => nil
+      })
+
+    assert conn.status == 409
+    assert %{"code" => "subscription_rejected"} = Jason.decode!(conn.resp_body)
+
+    conn = call("PATCH", "/v1/subscriptions/null-budget", admin, %{"max_attempts" => nil})
+    assert conn.status == 409
+    assert %{"code" => "subscription_rejected"} = Jason.decode!(conn.resp_body)
   end
 
   test "unknown routes return problem details" do
