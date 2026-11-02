@@ -1033,6 +1033,12 @@ def scenario_b6(args, base_url: str, admin_token: str, db_url: str) -> dict:
         db_url,
         f"SELECT id FROM subscriptions WHERE name = '{subscription}';\n",
     )
+    if not subscription_id:
+        raise RuntimeError(
+            f"bench subscription '{subscription}' was not found in the database; "
+            f"failed to seed deliveries against {redact_url(db_url)}. The broker HTTP "
+            f"edge at {base_url} and the harness database must use the same database."
+        )
     tag = f"{BENCH_PREFIX}drain-{run_id}"
     seed_started = time.monotonic()
     seed_pending(db_url, subscription_id, args.rows, tag)
@@ -1391,9 +1397,6 @@ def run_scenario(args: argparse.Namespace, scenario: str, db_url: str) -> dict:
 
     if scenario == "b1":
         return scenario_b1(args, db_url)
-
-    if scenario in SEEDING_SCENARIOS:
-        cleanup_bench(db_url)
 
     if scenario in {"b2", "b3", "b4", "b5", "b6", "b9"} and not token:
         return skip(

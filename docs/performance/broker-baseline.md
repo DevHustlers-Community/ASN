@@ -12,6 +12,11 @@ broker database over `psql`.
   `--allow-nonlocal` is passed.
 - The global retention purge (B7) refuses to run unless `--allow-shared-db`
   is passed, because it can delete non-benchmark rows.
+- Bench rows are cleaned up after each scenario finishes. A run terminated
+  before cleanup completes (a hard kill such as SIGKILL or power loss, or a
+  `cleanup_bench` failure) leaves `bench-` rows in place until a later
+  seeding scenario's cleanup succeeds. Concurrent harness invocations
+  against the same database are unsupported because the cleanup is global.
 - Never point the harness at a production database.
 
 ## Scenarios
