@@ -11,7 +11,10 @@ broker database over `psql`.
 - The harness refuses to seed/delete against a non-local database host unless
   `--allow-nonlocal` is passed.
 - The global retention purge (B7) refuses to run unless `--allow-shared-db`
-  is passed, because it can delete non-benchmark rows.
+  is passed or no non-benchmark expired rows exist, because it can delete
+  non-benchmark rows. Never pass `--allow-shared-db` for B7 against the shared
+  database; use a dedicated benchmark database instead (see
+  [Running](#dedicated-benchmark-database-b67) below).
 - Never point the harness at a production database.
 
 ## Scenarios
@@ -44,6 +47,64 @@ python3 scripts/dev/broker-load.py --scenario all --token dev-admin-token --outp
 
 B1 only needs PostgreSQL. HTTP scenarios need a running broker and a bearer
 token with the required scopes.
+
+### Dedicated benchmark database (B6/B7)
+
+The retention purge (B7) is global: it deletes every expired delivered,
+dead-lettered, and skipped delivery and every expired event with no retained
+delivery, not just `bench-` rows. Therefore: **never run B7 with
+`--allow-shared-db` against the shared development database (`broker_db`)** —
+that flag explicitly accepts deleting non-benchmark rows there. Run B7 against
+a dedicated `broker_bench` database instead, and without `--allow-shared-db`:
+on a fresh `broker_bench` the harness's non-benchmark expired-row counts are
+0, B7 runs unguarded, and its output records `allow_shared_db: false` as
+evidence. On a populated shared database the same check is what makes B7
+refuse to run at all.
+
+B6 (backlog drain) benefits too: a broker that serves only `bench-`
+subscriptions measures drain rates without distortion from real traffic.
+
+The init script `infrastructure/postgres/init/01-create-databases.sh` only
+creates databases on an empty volume, so create `broker_bench` once, manually:
+
+```bash
+docker compose exec -T postgres psql -U postgres \
+  -c "CREATE DATABASE broker_bench OWNER asn_broker"
+```
+
+Migrate the dedicated database (the URL is selected by `BROKER_DATABASE_URL`
+everywhere: dev repo config, `mix ecto.*`, the harness `--db-url` default, and
+B7's purge subprocess):
+
+```bash
+cd services/event-broker && mix deps.get
+BROKER_DATABASE_URL="postgres://asn_broker:change_me@localhost:5432/broker_bench" \
+  mix ecto.migrate
+```
+
+For HTTP scenarios (B6), start the broker against the same database:
+
+```bash
+BROKER_DATABASE_URL="postgres://asn_broker:change_me@localhost:5432/broker_bench" \
+  BROKER_ADMIN_TOKEN=dev-admin-token mix run --no-halt
+```
+
+Then run the harness with an explicit `--db-url` (`--db-url` falls back to
+`BROKER_DATABASE_URL`; B7 needs no broker, B6 does):
+
+```bash
+python3 scripts/dev/broker-load.py --scenario b7 --rows 10000 \
+  --db-url "postgres://asn_broker:change_me@localhost:5432/broker_bench" \
+  --output /tmp/b7-bench.json
+python3 scripts/dev/broker-load.py --scenario b6 --rows 10000 \
+  --token dev-admin-token \
+  --db-url "postgres://asn_broker:change_me@localhost:5432/broker_bench" \
+  --output /tmp/b6-bench.json
+```
+
+Size the scenarios deliberately: B6 defaults to 1,000,000 pending rows and B7
+defaults to 2M delivered + 500k dead + 1M events (harness
+`SCENARIO_DEFAULTS`). Start at `--rows 10000` to prove the flow, then scale.
 
 ## Results template
 
@@ -95,3 +156,38 @@ ran with `--allow-shared-db` and fanned out to one non-bench subscription.
    index-lookup change.
 5. **B6/B7:** fix the harness seed order and run against a dedicated
    benchmark database before deciding on F5 (batched lease) and purge tuning.
+
+## 2026-11-02 — broker_bench (dedicated benchmark database)
+
+Environment: local Linux, AMD Ryzen 5 4600G (12 threads), 13 GB RAM.
+PostgreSQL 18.6 (docker compose, `postgres:18.6-alpine3.24`) with a dedicated
+`broker_bench` database created manually (`CREATE DATABASE broker_bench OWNER
+asn_broker` — the init script only seeds databases on an empty volume) and
+migrated with `mix ecto.migrate`; 6 tables including `schema_migrations`
+confirmed. Broker `mix run --no-halt` on port 4004 pointed at `broker_bench`
+via `BROKER_DATABASE_URL`,
+`pool_size: 10` (dev config), single consumer per claim (B6 harness default),
+Bandit 1.14.0. B7 ran with no HTTP listener and no workers (harness purge
+subprocess). Git sha `bdab65e`.
+
+| Scenario | Metric | Result | Notes |
+|---|---|---|---|
+| B6 | backlog drain, 10,000 pending rows | 10,000 claimed and acked in 145.69 s (68.64/s), 1,000 batches of 100, seed 0.66 s, 0 errors, `remaining_pending: 0` | ran without `--allow-shared-db` (B6 never needs it); dedicated `broker_bench` |
+| B6 | backlog drain at target size (1,000,000 pending rows) | not run | at the measured 68.64/s the default 1M-row backlog would exceed the 1800 s drain budget (a 100k-row attempt against `broker_db` earlier on 2026-11-02, before `broker_bench` existed, drained 7,590 of 100,000 rows at 4.21/s before hitting the 1800 s budget); waiting on drain-rate fixes before re-running — tracked in issues #5, #6, #9 |
+| B7 | retention purge, 10,000 base rows (20,000 delivered + 5,000 dead + 10,000 extra events) | purged 20,000 delivered, 5,000 terminal, and 35,000 events in 2,615 ms; seed 1.66 s, run wall-clock 3.51 s | ran **without** `--allow-shared-db`; JSON records `allow_shared_db: false` and `nonbench_expired_before` all 0, proving the guard was not bypassed |
+| B7 | retention purge at target size (2M delivered + 500k dead + 1M events) | not run | harness defaults seed millions of rows; first prove the flow at reduced size, scale after purge tuning is decided — tracked in issues #5, #9 |
+
+### Decisions supported by this run
+
+1. **Dedicated database path works:** B7 ran end to end with zero
+   non-benchmark rows at risk because `broker_bench` contained no
+   non-`bench-` data; the `--allow-shared-db` override is no longer needed
+   for any scenario. This is the documented path for future B6/B7 runs.
+2. **Drain throughput is the open problem:** 68.64/s at 10k rows means a
+   default-size B6 backlog takes hours. Batched lease / claim-path work in
+   issues #5, #6, and #9 should target this number; re-run B6 at 100k and 1M
+   on `broker_bench` after those land.
+3. **Purge is viable but untested at scale:** the 10k run deleted 60,000 rows
+   (25,000 deliveries + 35,000 events) in 2,615 ms (~22,900 rows/s);
+   full-size B7 (2M delivered + 500k dead + 1M events, ~3.5M rows seeded) is
+   the next measurement once the retention worker decisions (F2) are settled.
