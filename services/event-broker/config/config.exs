@@ -21,11 +21,13 @@ config :asn_event_broker, :delivery,
 config :asn_event_broker, :start_workers, true
 
 # Retention defaults from ADR 0008 §8: delivered 24 h, dead/skipped 30 days,
-# event log 7 days (a deletion floor, not a replay promise).
+# event log 7 days (a deletion floor, not a replay promise). Outside the test
+# sandbox, Workers.RetentionWorker runs the purge every `retention_interval_ms`.
 config :asn_event_broker, :retention,
   delivered_hours: 24,
   terminal_days: 30,
-  event_log_days: 7
+  event_log_days: 7,
+  retention_interval_ms: 3_600_000
 
 # The HTTP edge (ADR 0008 §2): Plug + Bandit at the edge only.
 config :asn_event_broker, :http,
