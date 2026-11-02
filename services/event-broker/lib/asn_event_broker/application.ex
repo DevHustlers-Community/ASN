@@ -31,7 +31,11 @@ defmodule AsnEventBroker.Application do
   # calling it directly (HTTP tests go through Plug.Test).
   defp maybe_add_workers(children) do
     if Application.get_env(:asn_event_broker, :start_workers, true) do
-      children ++ [AsnEventBroker.Workers.LeaseReaper]
+      children ++
+        [
+          AsnEventBroker.Workers.LeaseReaper,
+          AsnEventBroker.Workers.RetentionWorker
+        ]
     else
       children
     end

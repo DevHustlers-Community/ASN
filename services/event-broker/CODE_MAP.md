@@ -21,6 +21,18 @@ until [ADR 0008](../../docs/decisions/README.md) selects a delivery transport.
 | `lib/asn_event_broker/application.ex` | Root supervision tree |
 | `lib/asn_event_broker/repo.ex` | Ecto repo and `broker_db` boundary |
 
+## Workers
+
+Scheduled workers under `lib/asn_event_broker/workers/` are GenServer
+schedulers only; the business logic stays in the owning subsystem so tests can
+call it directly. They are disabled under the test sandbox. The first run
+happens one full interval after boot — there is no immediate tick at start.
+
+| File | Responsibility |
+|---|---|
+| `lib/asn_event_broker/workers/lease_reaper.ex` | Returns expired leases to `pending`, or dead-letters them when attempts are exhausted |
+| `lib/asn_event_broker/workers/retention_worker.ex` | Schedules the dependency-aware retention purge (`Retention.purge/1`) every `retention_interval_ms` |
+
 ## Planned subsystems
 
 | Path | Responsibility | May depend on |

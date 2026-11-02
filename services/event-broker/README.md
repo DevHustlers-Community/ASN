@@ -38,7 +38,7 @@ rules.
 
 | Path | Responsibility |
 |---|---|
-| `lib/asn_event_broker/application.ex` | Root supervision tree; starts the repo, the claim waiter registry, and (outside tests) the lease reaper |
+| `lib/asn_event_broker/application.ex` | Root supervision tree; starts the repo, the claim waiter registry, and (outside tests) the scheduled workers (lease reaper, retention purge) |
 | `lib/asn_event_broker/repo.ex` | The only Ecto boundary for `broker_db` |
 | `lib/asn_event_broker/uuid_v7.ex` | RFC 9562 UUIDv7 generation (stand-in until §9 item 16 is decided) |
 | `lib/asn_event_broker/events/` | Envelope validation, canonical content hashing, event schema |
@@ -49,7 +49,7 @@ rules.
 | `lib/asn_event_broker/delivery/` | Delivery schema and the claim waiter registry |
 | `lib/asn_event_broker/acknowledgements.ex` | Ack/nack/extend with exact lease-token semantics |
 | `lib/asn_event_broker/retries.ex` | Bounded exponential backoff with jitter |
-| `lib/asn_event_broker/workers/` | Scheduled workers (lease reaper) |
+| `lib/asn_event_broker/workers/` | Scheduled workers (lease reaper, retention purge) |
 | `lib/asn_event_broker/security/` | Service credential schema (auth flow lands with the HTTP edge) |
 | `lib/asn_event_broker/audit/` | Append-only admin audit records |
 | `config/` | Compile-time configuration plus dev/test/prod/runtime split |
@@ -224,7 +224,8 @@ mix test
 
 The HTTP edge serves the v1 contract at `EVENT_BROKER_PORT` (default 4004).
 Running `mix run --no-halt` starts the OTP application, repo, waiter
-registry, lease reaper, HTTP listener, and admin bootstrap, then waits. The
+registry, lease reaper, retention worker, HTTP listener, and admin
+bootstrap, then waits. The
 first credential is seeded from `BROKER_ADMIN_TOKEN` when the credentials
 table is empty; further credentials are issued, listed, and revoked through
 the admin endpoints (`/v1/credentials`, `/v1/credentials/{id}/revoke`), and
@@ -258,6 +259,28 @@ mix test
 transport and credential layers ([ADR 0008](../../docs/decisions/0008-broker-transport-and-delivery-contract.md),
 accepted) and are not read by the scaffold. `BROKER_ADMIN_TOKEN` seeds the
 first admin credential at first boot once credential storage exists.
+
+### Scheduled workers
+
+Scheduled workers run against the real database (`config :asn_event_broker,
+:retention` and `:delivery` intervals) and are disabled in the test sandbox
+(`config/test.exs` sets `config :asn_event_broker, :start_workers, false`;
+tests exercise their logic by calling the underlying functions directly).
+
+The retention worker (`Workers.RetentionWorker`) calls `Retention.purge/1`
+every
+
+```elixir
+config :asn_event_broker, :retention,
+  delivered_hours: 24,        # delivered deliveries purge after this many hours
+  terminal_days: 30,          # dead/skipped deliveries purge after this many days
+  event_log_days: 7,          # event-log deletion floor
+  retention_interval_ms: 3_600_000  # purge frequency outside the test sandbox
+```
+
+The first purge runs one full interval after boot — there is no immediate
+tick at start (the same schedule as the lease reaper). Defaults are from
+[ADR 0008 §8](../../docs/decisions/0008-broker-transport-and-delivery-contract.md).
 
 ## Boundaries
 
