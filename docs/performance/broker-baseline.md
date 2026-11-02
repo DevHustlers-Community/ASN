@@ -15,6 +15,11 @@ broker database over `psql`.
   non-benchmark rows. Never pass `--allow-shared-db` for B7 against the shared
   database; use a dedicated benchmark database instead (see
   [Running](#dedicated-benchmark-database-b67) below).
+- Bench rows are cleaned up after each scenario finishes. A run terminated
+  before cleanup completes (a hard kill such as SIGKILL or power loss, or a
+  `cleanup_bench` failure) leaves `bench-` rows in place until a later
+  seeding scenario's cleanup succeeds. Concurrent harness invocations
+  against the same database are unsupported because the cleanup is global.
 - Never point the harness at a production database.
 
 ## Scenarios
