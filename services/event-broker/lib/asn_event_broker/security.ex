@@ -2,11 +2,13 @@ defmodule AsnEventBroker.Security do
   @moduledoc """
   Credential verification and authorization for the HTTP edge (ADR 0008 §9).
 
-  Tokens are verified by hashing the presented bearer token and comparing
-  constant-time against stored hashes of non-revoked, unexpired credentials.
-  The broker's first admin credential is seeded from `BROKER_ADMIN_TOKEN` at
-  first boot only (when the credentials table is empty); later rotation
-  happens through the admin API.
+  Tokens are verified by hashing the presented bearer token, looking up that
+  hash through the unique `service_credentials(token_hash)` index (a single
+  candidate row instead of a table scan), and comparing constant-time against
+  the stored hash of that projected non-revoked, unexpired row. The broker's
+  first admin credential is seeded from `BROKER_ADMIN_TOKEN` at first boot
+  only (when the credentials table is empty); later rotation happens through
+  the admin API.
   """
 
   import Ecto.Query
@@ -124,18 +126,28 @@ defmodule AsnEventBroker.Security do
   def authorize("Bearer " <> token) when is_binary(token) and token != "" do
     presented = hash(token)
 
-    candidates =
-      Repo.all(
-        from c in ServiceCredential,
-          where: is_nil(c.revoked_at) and (is_nil(c.expires_at) or c.expires_at > ^now())
-      )
+    # Look up the single row whose hash is the presented hash (the unique
+    # `service_credentials(token_hash)` index) with the revoked/expired
+    # filters in SQL. A missing row, a revoked row, and an expired row all
+    # return the same shape from here on — no distinguishing exit — and the
+    # constant-time comparison on the returned row is kept (a matching row
+    # cannot mismatch at this point, but the compare stays as the
+    # authorization decision, not an index assumption).
+    case Repo.one(
+           from c in ServiceCredential,
+             where:
+               c.token_hash == ^presented and
+                 is_nil(c.revoked_at) and
+                 (is_nil(c.expires_at) or c.expires_at > ^now())
+         ) do
+      nil ->
+        {:error, :unauthorized}
 
-    matching =
-      Enum.find(candidates, fn credential ->
-        hash_equals(presented, credential.token_hash)
-      end)
-
-    if matching, do: {:ok, matching}, else: {:error, :unauthorized}
+      credential ->
+        if hash_equals(presented, credential.token_hash),
+          do: {:ok, credential},
+          else: {:error, :unauthorized}
+    end
   end
 
   def authorize(_), do: {:error, :unauthorized}
