@@ -19,11 +19,20 @@ flows live in `tests/end-to-end`.
 ## 1. Overview & Toolchain
 
 - **Runtime & Package Manager:** Bun v1.4+ (`bun.lock`).
-- **Framework & Bundler:** React 18, TypeScript, Vite.
-- **Styling & Design System:** Tailwind CSS, CSS Custom Properties (Multi-theme engine), Radix UI primitives.
+- **Framework & Bundler:** React 19, TypeScript 7, Vite 8.
+- **Styling & Design System:** Tailwind CSS 4, CSS Custom Properties (Multi-theme engine), Radix UI primitives.
 - **Fonts:** 100% Offline Local Fonts (`IBM Plex Sans Arabic` + `JetBrains Mono`) stored in `public/fonts/` with OFL licenses. No external CDN dependencies.
 - **State & Data Fetching:** TanStack Query (planned for Server Cache); theme and UI currently use React `useState` (global store planned).
 - **Security:** Strict E2EE boundary; planned E2EE support with opaque binary envelopes (`dev-opaque-v1`); no chat implementation or fixtures yet.
+
+Toolchain notes:
+
+- Tailwind CSS 4 runs through `@tailwindcss/postcss` in `postcss.config.js`.
+  `src/styles/globals.css` imports `tailwindcss` and loads the theme with
+  `@config "../../tailwind.config.ts"`.
+- `src/vite-env.d.ts` provides Vite's client types, including the side-effect
+  CSS import declarations required by TypeScript 7.
+- Vite 8 is required by `@vitejs/plugin-react` 6.
 
 ## 2. Directory Layout (`src/`)
 
