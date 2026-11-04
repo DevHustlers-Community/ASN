@@ -79,6 +79,11 @@ rejects an empty commit with no trailer. Pushes to `main` validate every record
 and all relative links; they do not re-check trailers on platform-created squash
 commits.
 
+Dependabot pull requests are exempt from the per-commit record and trailer
+checks: the bot cannot author a change record, and its diffs only touch manifests
+and lockfiles. The service workflows still run their tests, and the dependency
+diff is reviewed in the pull request.
+
 ## Change record, CHANGELOG.md, and ADR
 
 | Artifact | Answers | Lifetime |
