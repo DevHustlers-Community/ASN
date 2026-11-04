@@ -66,9 +66,14 @@ checks are guarded by `if files`; the trailer script rejects that commit.
   merge from `main`) → `0`.
 - `python3 scripts/ci/check-changelog.py --all` and `python3
   scripts/ci/check-links.py` → pass.
-- CI: see the pull request run for `governance.yml` on this branch.
-- Negative test: a scratch pull request with one trailerless commit must fail
-  the trailer step; the pull request and branch are then deleted.
+- CI, pull request #37: `Change records and links` green in 5 s; the new
+  `Validate Changelog trailers in pull request commits` step ran and passed.
+- Negative test, scratch pull request #38: one empty non-merge commit with no
+  trailer. `Validate change records in pull request commits` passed because the
+  commit has no diff, the new step failed with `commit message needs a trailer:
+  Changelog: docs/changelog/YYYY-MM-DD-short-slug.md`, and the later steps were
+  skipped. This is the empty-commit gap described under Why. The scratch pull
+  request and branch were deleted after the run.
 
 ## Follow-ups
 
