@@ -54,6 +54,7 @@ defmodule AsnEventBroker.SecurityTest do
 
   test "authorization probes the token hash (single indexed lookup, no table scan)" do
     {:ok, issued} = Security.issue("probe-service", [:publish])
+    presented = :crypto.hash(:sha256, issued.token) |> Base.encode16(case: :lower)
     test_pid = self()
 
     handler_id = "probe-sql-#{System.unique_integer()}"
@@ -62,7 +63,7 @@ defmodule AsnEventBroker.SecurityTest do
       handler_id,
       [[:asn_event_broker, :repo, :query]],
       fn _event, _measurements, metadata, _ ->
-        send(test_pid, {:sql, metadata.query})
+        send(test_pid, {:sql, metadata.source, metadata.query, metadata.params})
       end,
       nil
     )
@@ -70,11 +71,19 @@ defmodule AsnEventBroker.SecurityTest do
     on_exit(fn -> :telemetry.detach(handler_id) end)
 
     assert {:ok, _credential} = Security.authorize("Bearer " <> issued.token)
-    Process.sleep(50)
 
+    # This module is async, so statements from other tests land in the same
+    # mailbox. The presented hash is unique to this test and only the
+    # authorize SELECT binds it as its first parameter, so filtering on it
+    # keeps the probe deterministic. Ecto runs telemetry handlers in the
+    # querying process, so every statement is already collected here.
     queries =
       collect_sql()
-      |> Enum.filter(&String.contains?(String.downcase(&1), "service_credentials"))
+      |> Enum.filter(fn {source, query, params} ->
+        source == "service_credentials" and select?(query) and
+          match?([^presented | _], params)
+      end)
+      |> Enum.map(fn {_source, query, _params} -> query end)
 
     # A table-wide scan must never come back: the lookup is one statement
     # whose WHERE predicates on the indexed `token_hash` column.
@@ -85,9 +94,11 @@ defmodule AsnEventBroker.SecurityTest do
     refute String.contains?(String.downcase(query), "revoked_at is null")
   end
 
+  defp select?(query), do: query |> String.trim_leading() |> String.starts_with?("SELECT")
+
   defp collect_sql do
     receive do
-      {:sql, query} -> [query | collect_sql()]
+      {:sql, source, query, params} -> [{source, query, params} | collect_sql()]
     after
       0 -> []
     end
