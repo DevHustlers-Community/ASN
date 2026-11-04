@@ -22,7 +22,7 @@
     "lucide-react": "^0.453.0",
     "phoenix": "^1.7.14",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1",
+    "react-dom": "^19.3.1",
     "react-router-dom": "^6.27.0",
     "tailwind-merge": "^2.5.4",
     "zustand": "^5.0.0"
@@ -32,7 +32,7 @@
     "@types/node": "^22.8.1",
     "@types/phoenix": "^1.6.5",
     "@types/react": "^18.3.12",
-    "@types/react-dom": "^18.3.1",
+    "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^4.3.3",
     "autoprefixer": "^10.6.2",
     "bun-types": "^1.1.34",
