@@ -1,0 +1,115 @@
+name: E2E
+
+on:
+  pull_request:
+    paths:
+      - 'services/event-broker/**'
+      - 'services/chat-service/**'
+      - 'tests/e2e/**'
+      - 'infrastructure/postgres/**'
+      - 'compose.yaml'
+      - '.tool-versions'
+      - '.github/workflows/e2e.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'services/event-broker/**'
+      - 'services/chat-service/**'
+      - 'tests/e2e/**'
+      - 'infrastructure/postgres/**'
+      - 'compose.yaml'
+      - '.tool-versions'
+      - '.github/workflows/e2e.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  POSTGRES_USER: postgres
+  POSTGRES_PASSWORD: postgres
+  ASN_DB_PASSWORD: postgres
+  PGHOST: localhost
+  PGUSER: postgres
+  PGPASSWORD: postgres
+  E2E_BROKER_DATABASE_URL: postgres://asn_broker:postgres@localhost:5432/broker_db
+  E2E_BROKER_TEST_DATABASE_URL: postgres://asn_broker:postgres@localhost:5432/broker_db_test
+  E2E_CHAT_DATABASE_URL: postgres://asn_chat:postgres@localhost:5432/chat_db
+
+jobs:
+  broker-relay:
+    name: chat outbox -> broker -> claim -> ack
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    services:
+      postgres:
+        image: postgres:18.6-alpine3.24
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: '1.20.4'
+          otp-version: '29.1.2'
+
+      - name: Create service roles and databases
+        run: sh infrastructure/postgres/init/01-create-databases.sh
+
+      - name: Cache broker deps and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            services/event-broker/deps
+            services/event-broker/_build
+          key: broker-mix-${{ runner.os }}-${{ hashFiles('services/event-broker/mix.lock') }}
+          restore-keys: |
+            broker-mix-${{ runner.os }}-
+
+      - name: Cache chat deps and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            services/chat-service/deps
+            services/chat-service/_build
+          key: chat-mix-${{ runner.os }}-${{ hashFiles('services/chat-service/mix.lock') }}
+          restore-keys: |
+            chat-mix-${{ runner.os }}-
+
+      - name: Fetch broker dependencies
+        working-directory: services/event-broker
+        run: mix deps.get
+
+      - name: Fetch chat dependencies
+        working-directory: services/chat-service
+        run: mix deps.get
+
+      - name: Run the cross-service e2e
+        run: bash tests/e2e/broker-relay.sh
+
+      - name: Broker log on failure
+        if: failure()
+        run: |
+          if [ -f /tmp/e2e-broker.log ]; then
+            echo "===== broker log ====="
+            tail -n 200 /tmp/e2e-broker.log
+          fi
+          if [ -f /tmp/e2e-relay.log ]; then
+            echo "===== relay log ====="
+            tail -n 200 /tmp/e2e-relay.log
+          fi
