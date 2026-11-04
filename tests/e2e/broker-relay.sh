@@ -120,7 +120,7 @@ data = json.load(sys.stdin)
 deliveries = data["deliveries"]
 assert len(deliveries) == 1, f"expected exactly one delivery, got {len(deliveries)}"
 d = deliveries[0]
-assert d["type"] == "chat.device.registered", d["type"]
+assert d["type"] == "chat.device.unregistered", d["type"]
 assert d["payload"]["device_id"] == "e2e-device"
 assert d["lease_token"], "missing lease token"
 print("claimed", d["delivery_id"], "with envelope intact")
