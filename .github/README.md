@@ -38,6 +38,8 @@
 **Rules:**
 
 - Workflows never print secrets or full evidence payloads.
+- Every workflow declares `permissions: contents: read`, a per-workflow
+  concurrency group that cancels superseded runs, and a job timeout.
 - Database-backed jobs use disposable PostgreSQL instances, one per service.
 - A failing contract or change-record check blocks merge; it is not overridden by
   a code label.
