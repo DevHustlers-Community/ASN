@@ -2,11 +2,13 @@ defmodule AsnEventBroker.Security do
   @moduledoc """
   Credential verification and authorization for the HTTP edge (ADR 0008 §9).
 
-  Tokens are verified by hashing the presented bearer token and comparing
-  constant-time against stored hashes of non-revoked, unexpired credentials.
-  The broker's first admin credential is seeded from `BROKER_ADMIN_TOKEN` at
-  first boot only (when the credentials table is empty); later rotation
-  happens through the admin API.
+  Tokens are verified by hashing the presented bearer token, looking up that
+  hash through the unique `service_credentials(token_hash)` index (a single
+  candidate row instead of a table scan), and comparing constant-time against
+  the stored hash of that projected non-revoked, unexpired row. The broker's
+  first admin credential is seeded from `BROKER_ADMIN_TOKEN` at first boot
+  only (when the credentials table is empty); later rotation happens through
+  the admin API.
   """
 
   import Ecto.Query
@@ -124,21 +126,50 @@ defmodule AsnEventBroker.Security do
   def authorize("Bearer " <> token) when is_binary(token) and token != "" do
     presented = hash(token)
 
-    candidates =
-      Repo.all(
-        from c in ServiceCredential,
-          where: is_nil(c.revoked_at) and (is_nil(c.expires_at) or c.expires_at > ^now())
-      )
+    # Look up the single row whose hash is the presented hash (the unique
+    # `service_credentials(token_hash)` index) with the revoked/expired
+    # filters in SQL. A missing row, a revoked row, and an expired row all
+    # return the same shape from here on — no distinguishing exit — and the
+    # constant-time comparison on the returned row is kept as defence in
+    # depth (ADR 0008 §9): the SQL equality on the unique index already
+    # determines the row, but nothing in the authorization decision relies
+    # on the query plan being what the reader expects.
+    #
+    # The unique index makes a duplicate `token_hash` impossible, so
+    # `Repo.one/1` can return at most one row; if that invariant were ever
+    # broken, fail closed instead of surfacing a 500.
+    case lookup(presented) do
+      nil ->
+        {:error, :unauthorized}
 
-    matching =
-      Enum.find(candidates, fn credential ->
-        hash_equals(presented, credential.token_hash)
-      end)
-
-    if matching, do: {:ok, matching}, else: {:error, :unauthorized}
+      credential ->
+        if hash_equals(presented, credential.token_hash),
+          do: {:ok, credential},
+          else: {:error, :unauthorized}
+    end
   end
 
   def authorize(_), do: {:error, :unauthorized}
+
+  defp lookup(presented) do
+    Repo.one(
+      from c in ServiceCredential,
+        where:
+          c.token_hash == ^presented and
+            is_nil(c.revoked_at) and
+            (is_nil(c.expires_at) or c.expires_at > ^now())
+    )
+  rescue
+    exception in Ecto.MultipleResultsError ->
+      # A duplicate `token_hash` would violate the unique index; treat it as
+      # an unauthorized request and keep the invariant visible in the logs.
+      Logger.error(
+        "authorize: multiple active credentials share a token_hash " <>
+          "(unique index invariant broken): #{Exception.message(exception)}"
+      )
+
+      nil
+  end
 
   defp hash_equals(a, b) when byte_size(a) == byte_size(b) do
     :crypto.hash_equals(a, b)

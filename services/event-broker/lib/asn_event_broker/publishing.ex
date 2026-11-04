@@ -76,8 +76,8 @@ defmodule AsnEventBroker.Publishing do
   # ON CONFLICT DO NOTHING without a conflict target swallows both the
   # event_id PK conflict and the aggregate-version partial unique conflict;
   # resolve_conflict tells them apart by re-reading the row.
-  defp insert_event(envelope, _hash, publisher, received_at) do
-    event = Event.new_from_envelope(envelope, publisher, received_at)
+  defp insert_event(envelope, hash, publisher, received_at) do
+    event = Event.new_from_envelope(envelope, publisher, received_at, content_hash: hash)
 
     row = %{
       event_id: event.event_id,

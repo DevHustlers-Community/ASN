@@ -282,6 +282,45 @@ The first purge runs one full interval after boot — there is no immediate
 tick at start (the same schedule as the lease reaper). Defaults are from
 [ADR 0008 §8](../../docs/decisions/0008-broker-transport-and-delivery-contract.md).
 
+### Long-poll claims
+
+A claim first runs one cheap check that returns the subscription status, its
+leased count, and whether any delivery is claimable (the same head-of-line and
+`next_attempt_at` rules as the claim itself). A parked consumer with nothing
+claimable runs one statement per `sweep_interval_ms` and takes no `FOR UPDATE`
+lock; the claim transaction (row lock, in-flight count, and
+`UPDATE ... FROM ... RETURNING`) only starts when the check says a claim is
+possible.
+
+The wake race is closed without a second full claim attempt: the process joins
+the wakeup registry before the check, so a publish that commits after the check
+leaves a `:wake` in the mailbox. Wakes that arrived before the check are
+flushed because the check already observed them.
+
+At 50 parked consumers with `pool_size: 10`, this took the broker from ~7.3 to
+~1.1 statements/s per consumer and removed the connection errors recorded in
+the 2026-10-28 baseline; see
+[`docs/performance/broker-baseline.md`](../../docs/performance/broker-baseline.md).
+
+### Batched claims
+
+A claim leases the whole batch in one statement: it selects up to
+`min(claim max, in-flight cap)` pending deliveries (the head of each
+aggregate) and updates them in one `UPDATE ... FROM ... RETURNING`. Each
+delivery keeps its own lease token; the token hashes are passed as an array
+parameter and indexed by the selected slot.
+
+Candidate selection has no global `ORDER BY`. ADR 0008 §6 guarantees ordering
+per aggregate only, and the anti-join still selects the earliest non-terminal
+version of each aggregate. `FOR UPDATE SKIP LOCKED` is not used: the
+subscription-row `FOR UPDATE` lock serializes claimers of one subscription,
+and ADR 0008 §6 keeps `SKIP LOCKED` as an alternative to adopt only after
+contention is measured.
+
+At 100,000 pending rows one claim of 100 deliveries takes about 6 ms; the old
+one-statement-per-delivery loop took 748 ms for a single delivery. See
+[`docs/performance/broker-baseline.md`](../../docs/performance/broker-baseline.md).
+
 ### Metrics cache
 
 `/metrics` performs no database query while serving a scrape. Counters are

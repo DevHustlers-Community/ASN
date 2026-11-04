@@ -196,3 +196,87 @@ subprocess). Git sha `bdab65e`.
    (25,000 deliveries + 35,000 events) in 2,615 ms (~22,900 rows/s);
    full-size B7 (2M delivered + 500k dead + 1M events, ~3.5M rows seeded) is
    the next measurement once the retention worker decisions (F2) are settled.
+
+## 2026-11-04 — batched lease claims (issue #9)
+
+Environment: same host, PostgreSQL 18.6, dedicated `broker_b6` database
+(`CREATE DATABASE broker_b6 OWNER asn_broker`, then `mix ecto.migrate`),
+broker `mix run --no-halt` on port 4004, `pool_size: 10` (dev config),
+Bandit 1.14.0, one consumer. For the cap-100 row, `max_in_flight` was
+overridden at boot with `Application.put_env/3` (the dev default is 10).
+Claim time is Ecto's `db=` value from the broker's `QUERY OK` log, summed by
+statement; the harness reports the HTTP-level drain.
+
+| Run | cap | Rows | Drain | Batches | Claim statements | Claim SQL |
+|---|---|---|---|---|---|---|
+| before (pre-batch `main`) | 10 | 10,000 | 216.60 s (46.17/s) | 1,000 | 10,001 | 38,696 ms (3.87 ms avg) |
+| after | 10 | 10,000 | 169.72 s (58.92/s) | 1,000 | 1,001 | 2,458 ms (2.46 ms avg) |
+| after | 100 | 10,000 | 148.71 s (67.25/s) | 100 | 101 | 750 ms (7.43 ms avg) |
+
+The HTTP drain is dominated by acks: B6 acks one delivery per request and each
+ack is its own transaction, so 10,000 acks cost about 100 s in every run. The
+claim path itself got 15.7× cheaper at cap 10 (38.7 s to 2.5 s) and the claim
+statement count fell 10×.
+
+Statement-level at 100,000 pending rows (`EXPLAIN ANALYZE`, same database):
+
+| Statement | Rows | Time | Plan |
+|---|---|---|---|
+| old claim | 1 | 748.6 ms | sequential scan of 100,000 rows plus a 3,136 kB external merge sort |
+| new claim | 100 | 6.4 ms | sequential scan stops at `LIMIT 100`, then 100 primary-key updates |
+
+One-million-row table (990,000 delivered + 10,000 pending): the new 100-row
+claim takes 12.0 ms and uses
+`deliveries_subscription_id_next_attempt_at_index` (partial, pending), so a
+large terminal history does not turn the claim into a full table scan.
+
+SQL-only drain of 100,000 pending rows (claim batches plus a bulk ack per
+batch in one transaction): 100,000 rows in 22,406 ms (4,463/s, 1,000 batches).
+
+Not run: B6 end-to-end at 100,000 or 1,000,000 rows. 100,000 acks alone cost
+roughly 17 minutes at the measured ~10 ms per ack, so the harness cannot reach
+the claim-path scale until acks are batched; the claim statement was measured
+directly at 100,000 rows instead.
+
+### Decision
+
+The claim is now one statement and no longer sorts the subscription's whole
+pending backlog; `LIMIT` stops candidate selection, and the anti-join still
+enforces per-aggregate ordering. `max_in_flight` stays at 10 by default; the
+cap-100 run shows the statement scales to the configured batch size for
+operators who raise it. The next B6 bottleneck is the harness ack loop, not
+the claim.
+
+## 2026-11-04 — idle sweep cost (issue #5)
+
+Environment: same host, PostgreSQL 18.6, dedicated `broker_b5` database
+(`CREATE DATABASE broker_b5 OWNER asn_broker`, then `mix ecto.migrate`), broker
+`mix run --no-halt` on port 4004, `pool_size: 10` (dev config), Bandit 1.14.0.
+B5: 50 parked consumers, `wait_ms: 20000`, 30 s of load. Statement counts come
+from the broker's own `QUERY OK` log lines (pg_stat_statements is not enabled
+on this cluster); the harness reported HTTP-level requests and errors.
+
+| Run | Claim requests | Errors | Broker statements | Statements/s | `FOR UPDATE` lines |
+|---|---|---|---|---|---|
+| before (`upstream/main`) | 135 | 46 (34%) | 18,294 over 50.18 s | 364.6 | 6,004 |
+| after | 100 | 0 | 2,216 over 40.12 s | 55.2 | 0 |
+
+The run durations differ because errored requests returned immediately and
+retried, so the rate is the comparable figure. Per parked consumer the sweep
+cost fell from ~7.3 statements/s to ~1.1 statements/s, one check per
+`sweep_interval_ms`. The 8 `UPDATE deliveries` lines in the after log are the
+lease reaper's every-5-second pass over an empty lease set, not claims.
+
+Idle check plan on `broker_bench` (1,000,000 deliveries plus 1,000 leased
+rows for another subscription): the leased count uses a bitmap index scan on
+`deliveries_one_leased_per_aggregate`, the claimable probe uses
+`deliveries_subscription_id_next_attempt_at_index`, and the whole check runs in
+0.295 ms warm. The outer `subscriptions` lookup was a sequential scan only
+because the bench table has two rows.
+
+### Decision
+
+`pool_size: 10` is enough for 50 parked consumers: 0 connection errors and no
+lock acquisition while idle, so no default change is needed. The B6 drain
+throughput is a different problem — claimed batches, not idle sweeps — and is
+addressed in the batched-claims section above.

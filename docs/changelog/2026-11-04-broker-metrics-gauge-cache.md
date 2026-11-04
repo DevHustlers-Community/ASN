@@ -43,9 +43,10 @@ making the scrape path O(counters) work only.
 
 - `mix format --check-formatted` — passed.
 - `mix compile --warnings-as-errors` — passed.
-- `mix test` — 88 passed (3 properties, 85 tests), against real PostgreSQL
-  (`asn-postgres-1` healthy). New tests in
-  `test/integration/metrics_test.exs`:
+- `mix test` — 103 passed (3 properties, 100 tests), against real PostgreSQL
+  (`asn-postgres-1` healthy), after merging the idle-sweep pre-check from #31
+  and the batched claim from #32. Re-ran with seeds 1, 2, and 3 — 103 passed
+  each time. New tests in `test/integration/metrics_test.exs`:
   - `render performs no database query`: attaches
     `[:asn_event_broker, :repo, :query]`, asserts `refresh/0` emits one query
     and `render/0` emits none;
@@ -61,6 +62,8 @@ making the scrape path O(counters) work only.
   production interval, read `:asn_event_broker_gauges` after boot
   (`pending: 1000, leased: 1000, dead: 799000`), waited one interval and saw
   it refreshed again from the scheduled tick, without any scrape.
+- `bash tests/e2e/broker-relay.sh` — passed after the merge (chat outbox →
+  relay → broker → claim → ack → metrics).
 - `python3 scripts/ci/check-changelog.py --all` — passed.
 - `python3 scripts/ci/check-links.py` — passed.
 
