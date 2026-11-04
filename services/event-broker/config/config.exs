@@ -34,6 +34,10 @@ config :asn_event_broker, :http,
   enabled: true,
   port: 4004
 
+# /metrics gauges are cached and refreshed on this interval so a scrape never
+# queries the database. 0 disables the timer (tests call Web.Metrics.refresh/0).
+config :asn_event_broker, :metrics, gauge_interval_ms: 5_000
+
 config :asn_event_broker, :bootstrap_admin, true
 
 config :logger, :default_formatter,

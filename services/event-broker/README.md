@@ -282,6 +282,23 @@ The first purge runs one full interval after boot — there is no immediate
 tick at start (the same schedule as the lease reaper). Defaults are from
 [ADR 0008 §8](../../docs/decisions/0008-broker-transport-and-delivery-contract.md).
 
+### Metrics cache
+
+`/metrics` performs no database query while serving a scrape. Counters are
+exact — they accumulate from `:telemetry` into an ETS table — while the queue
+gauges (`pending`, `leased`, `dead`, `oldest_pending_seconds`) are refreshed
+by the metrics process and cached in a second ETS table, so a scrape is at
+most one interval stale:
+
+```elixir
+config :asn_event_broker, :metrics,
+  gauge_interval_ms: 5_000  # 0 disables the timer
+```
+
+The interval is `0` in the test sandbox (the metrics process has no sandbox
+checkout); tests call `AsnEventBroker.Web.Metrics.refresh/0` inside their own
+checkout and assert the rendered values.
+
 ## Boundaries
 
 - Only the broker reads or writes `broker_db`. No business service gets a
