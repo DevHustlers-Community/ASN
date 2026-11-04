@@ -20,7 +20,9 @@ defmodule AsnEventBroker.DeliveryTest do
     |> Repo.insert!()
   end
 
-  def publish_aggregate_versions(_name, versions) do
+  def publish_aggregate_versions(_name, versions), do: publish_versions(@agg_id, versions)
+
+  def publish_versions(aggregate_id, versions) do
     Enum.each(versions, fn v ->
       attrs = %{
         "event_id" => Ecto.UUID.generate(),
@@ -28,9 +30,23 @@ defmodule AsnEventBroker.DeliveryTest do
         "schema_version" => 1,
         "occurred_at" => "2026-10-25T10:00:00Z",
         "aggregate_type" => "user",
-        "aggregate_id" => @agg_id,
+        "aggregate_id" => aggregate_id,
         "aggregate_version" => v,
         "payload" => %{"version" => v}
+      }
+
+      assert {:ok, :created} = Publishing.publish(attrs, "social-api")
+    end)
+  end
+
+  def publish_aggregate_less(count) do
+    Enum.each(1..count, fn _ ->
+      attrs = %{
+        "event_id" => Ecto.UUID.generate(),
+        "type" => "system.pulse",
+        "schema_version" => 1,
+        "occurred_at" => "2026-10-25T10:00:00Z",
+        "payload" => %{}
       }
 
       assert {:ok, :created} = Publishing.publish(attrs, "social-api")
@@ -242,6 +258,42 @@ defmodule AsnEventBroker.DeliveryTest do
     assert length(claimed) == 3
   end
 
+  test "a claim leases every available delivery in one UPDATE" do
+    insert_subscription("chat-batch")
+    publish_aggregate_less(6)
+    queries = capture_queries()
+
+    assert {:ok, claimed} = Delivery.claim("chat-batch", 10, 0)
+    assert length(claimed) == 6
+    assert claimed |> Enum.map(& &1.delivery_id) |> Enum.uniq() |> length() == 6
+    assert claimed |> Enum.map(& &1.lease_token) |> Enum.uniq() |> length() == 6
+    assert Enum.all?(claimed, &(&1.attempts == 1))
+
+    assert Enum.count(queries.(), &String.contains?(&1, "UPDATE deliveries")) == 1
+  end
+
+  test "a batch never leases two versions of the same aggregate" do
+    insert_subscription("chat-multi")
+    aggregate_ids = for _ <- 1..3, do: Ecto.UUID.generate()
+    Enum.each(aggregate_ids, &publish_versions(&1, [1, 2, 3]))
+
+    assert {:ok, first} = Delivery.claim("chat-multi", 10, 0)
+    assert Enum.sort(Enum.map(first, & &1.aggregate_version)) == [1, 1, 1]
+
+    # Versions 2 and 3 stay blocked while their heads are leased.
+    assert {:ok, []} = Delivery.claim("chat-multi", 10, 0)
+
+    Enum.each(first, &Acknowledgements.ack(&1.delivery_id, &1.lease_token))
+
+    assert {:ok, second} = Delivery.claim("chat-multi", 10, 0)
+    assert Enum.sort(Enum.map(second, & &1.aggregate_version)) == [2, 2, 2]
+
+    Enum.each(second, &Acknowledgements.ack(&1.delivery_id, &1.lease_token))
+
+    assert {:ok, third} = Delivery.claim("chat-multi", 10, 0)
+    assert Enum.sort(Enum.map(third, & &1.aggregate_version)) == [3, 3, 3]
+  end
+
   test "publish wakes parked claims before the fallback sweep" do
     insert_subscription("chat-wake")
 
@@ -290,5 +342,31 @@ defmodule AsnEventBroker.DeliveryTest do
     assert {:ok, :created} = Publishing.publish(attrs, "social-api")
     assert System.monotonic_time(:millisecond) - started < 400
     assert Repo.all(AsnEventBroker.Delivery.Delivery) == []
+  end
+
+  defp capture_queries do
+    test_pid = self()
+    handler_id = "delivery-sql-#{System.unique_integer([:positive])}"
+
+    :telemetry.attach(
+      handler_id,
+      [:asn_event_broker, :repo, :query],
+      fn _event, _measurements, metadata, _ ->
+        if self() == test_pid, do: send(test_pid, {:query, metadata.query})
+      end,
+      nil
+    )
+
+    on_exit(fn -> :telemetry.detach(handler_id) end)
+
+    fn -> collect_queries([]) end
+  end
+
+  defp collect_queries(acc) do
+    receive do
+      {:query, sql} -> collect_queries([sql | acc])
+    after
+      0 -> Enum.reverse(acc)
+    end
   end
 end

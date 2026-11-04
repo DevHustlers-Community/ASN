@@ -282,6 +282,25 @@ The first purge runs one full interval after boot — there is no immediate
 tick at start (the same schedule as the lease reaper). Defaults are from
 [ADR 0008 §8](../../docs/decisions/0008-broker-transport-and-delivery-contract.md).
 
+### Batched claims
+
+A claim leases the whole batch in one statement: it selects up to
+`min(claim max, in-flight cap)` pending deliveries (the head of each
+aggregate) and updates them in one `UPDATE ... FROM ... RETURNING`. Each
+delivery keeps its own lease token; the token hashes are passed as an array
+parameter and indexed by the selected slot.
+
+Candidate selection has no global `ORDER BY`. ADR 0008 §6 guarantees ordering
+per aggregate only, and the anti-join still selects the earliest non-terminal
+version of each aggregate. `FOR UPDATE SKIP LOCKED` is not used: the
+subscription-row `FOR UPDATE` lock serializes claimers of one subscription,
+and ADR 0008 §6 keeps `SKIP LOCKED` as an alternative to adopt only after
+contention is measured.
+
+At 100,000 pending rows one claim of 100 deliveries takes about 6 ms; the old
+one-statement-per-delivery loop took 748 ms for a single delivery. See
+[`docs/performance/broker-baseline.md`](../../docs/performance/broker-baseline.md).
+
 ## Boundaries
 
 - Only the broker reads or writes `broker_db`. No business service gets a

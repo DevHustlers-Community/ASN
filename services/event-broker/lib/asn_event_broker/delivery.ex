@@ -9,6 +9,11 @@ defmodule AsnEventBroker.Delivery do
   a short `FOR UPDATE` lock on the subscription row to serialize concurrent
   claims; the lock is never held while parked. `attempts` increments at claim
   time so crashed consumers consume retry budget.
+
+  One statement leases the whole batch: candidates are selected up to the
+  in-flight cap and updated in place, with one lease token per delivery.
+  Selection is not globally ordered (ADR 0008 §6); ordering is guaranteed per
+  aggregate only.
   """
 
   import Ecto.Query
@@ -19,20 +24,22 @@ defmodule AsnEventBroker.Delivery do
 
   @max_claim_batch 100
 
-  # Earliest non-terminal per aggregate: a pending, leased, or dead earlier
-  # version blocks later versions (head-of-line blocking is deliberate);
-  # delivered and skipped do not block. Aggregate-less events are unordered.
+  # One statement leases the whole batch. Candidate selection has no global
+  # ORDER BY: ADR 0008 §6 guarantees ordering per aggregate only, and the
+  # anti-join below enforces it (a pending, leased, or dead earlier version
+  # blocks later versions; delivered and skipped do not). Sorting the
+  # subscription's whole pending backlog per claim is what made the old
+  # one-row loop O(backlog) per claimed row.
+  #
+  # Candidates are numbered only to give each delivery its own token from the
+  # caller's array. The window runs over the LIMITed set, not the backlog.
+  # `FOR UPDATE SKIP LOCKED` is unnecessary: the SELECT does not lock, and the
+  # subscription-row lock serializes claimers of one subscription.
   @claim_sql """
-  UPDATE deliveries d
-  SET state = 'leased',
-      attempts = d.attempts + 1,
-      lease_token_hash = $1,
-      lease_expires_at = clock_timestamp() + ($2 * interval '1 second'),
-      updated_at = $3
-  WHERE d.id = (
+  WITH candidates AS (
     SELECT c.id
     FROM deliveries c
-    WHERE c.subscription_id = $4
+    WHERE c.subscription_id = $3
       AND c.state = 'pending'
       AND (c.next_attempt_at IS NULL OR c.next_attempt_at <= clock_timestamp())
       AND (
@@ -48,12 +55,28 @@ defmodule AsnEventBroker.Delivery do
             AND e.aggregate_version < c.aggregate_version
         )
       )
-    ORDER BY c.aggregate_version NULLS LAST
-    LIMIT 1
-    FOR UPDATE SKIP LOCKED
+    LIMIT $4
+  ),
+  numbered AS (
+    SELECT id, row_number() OVER (ORDER BY id) AS rn
+    FROM candidates
+  ),
+  claimed AS (
+    UPDATE deliveries d
+    SET state = 'leased',
+        attempts = d.attempts + 1,
+        lease_token_hash = ($1::text[])[n.rn],
+        lease_expires_at = clock_timestamp() + ($2 * interval '1 second'),
+        updated_at = $5
+    FROM numbered n
+    WHERE d.id = n.id
+    RETURNING n.rn, d.id, d.event_id, d.aggregate_type, d.aggregate_id,
+              d.aggregate_version, d.attempts, d.lease_expires_at
   )
-  RETURNING d.id, d.event_id, d.aggregate_type, d.aggregate_id,
-            d.aggregate_version, d.attempts, d.lease_expires_at
+  SELECT rn, id, event_id, aggregate_type, aggregate_id, aggregate_version,
+         attempts, lease_expires_at
+  FROM claimed
+  ORDER BY rn
   """
 
   @spec claim(String.t(), pos_integer(), non_neg_integer()) ::
@@ -92,7 +115,7 @@ defmodule AsnEventBroker.Delivery do
       ])
 
       allowed = delivery_cfg(:max_in_flight) - in_flight_count(subscription.id)
-      lease_batch(subscription, max, min(max, allowed), [])
+      lease_batch(subscription, min(max, allowed))
     end)
     |> case do
       {:ok, result} ->
@@ -104,27 +127,24 @@ defmodule AsnEventBroker.Delivery do
     end
   end
 
-  defp lease_batch(_subscription, _max, remaining, acc) when remaining <= 0,
-    do: Enum.reverse(acc)
+  defp lease_batch(_subscription, remaining) when remaining <= 0, do: []
 
-  defp lease_batch(subscription, max, remaining, acc) do
-    now = utc_now()
-    token = :crypto.strong_rand_bytes(32) |> Base.url_encode64(padding: false)
+  defp lease_batch(subscription, remaining) do
+    tokens = Enum.map(1..remaining, fn _ -> new_token() end)
 
-    case Repo.query!(@claim_sql, [
-           hash(token),
-           delivery_cfg(:lease_seconds),
-           now,
-           uuid(subscription.id)
-         ]) do
-      %{num_rows: 0} ->
-        Enum.reverse(acc)
+    %{columns: columns, rows: rows} =
+      Repo.query!(@claim_sql, [
+        Enum.map(tokens, &hash/1),
+        delivery_cfg(:lease_seconds),
+        uuid(subscription.id),
+        remaining,
+        utc_now()
+      ])
 
-      %{columns: columns, rows: [row]} ->
-        claimed = claimed_map(columns, row, token)
-        lease_batch(subscription, max, remaining - 1, [claimed | acc])
-    end
+    Enum.map(rows, &claimed_map(columns, &1, tokens))
   end
+
+  defp new_token, do: :crypto.strong_rand_bytes(32) |> Base.url_encode64(padding: false)
 
   defp in_flight_count(subscription_id) do
     Repo.one!(
@@ -174,12 +194,13 @@ defmodule AsnEventBroker.Delivery do
   defp remaining_ms(deadline),
     do: max(0, deadline - System.monotonic_time(:millisecond))
 
-  defp claimed_map(columns, row, token) do
+  defp claimed_map(columns, row, tokens) do
     values =
       columns
       |> Enum.zip(row)
-      |> Map.new(fn {column, value} ->
-        {String.to_existing_atom(column), normalize_column(column, value)}
+      |> Map.new(fn
+        {"rn", rn} -> {:rn, rn}
+        {column, value} -> {String.to_existing_atom(column), normalize_column(column, value)}
       end)
 
     %{
@@ -189,7 +210,7 @@ defmodule AsnEventBroker.Delivery do
       aggregate_id: Map.fetch!(values, :aggregate_id),
       aggregate_version: Map.fetch!(values, :aggregate_version),
       attempts: Map.fetch!(values, :attempts),
-      lease_token: token,
+      lease_token: Enum.at(tokens, Map.fetch!(values, :rn) - 1),
       lease_expires_at: Map.fetch!(values, :lease_expires_at)
     }
   end
