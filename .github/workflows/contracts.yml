@@ -1,0 +1,55 @@
+name: Contracts
+
+on:
+  pull_request:
+    paths:
+      - 'contracts/**'
+      - 'scripts/contracts/**'
+      - '.github/workflows/contracts.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'contracts/**'
+      - 'scripts/contracts/**'
+      - '.github/workflows/contracts.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: contracts-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: scripts/contracts/requirements.txt
+
+      - name: Install contract tooling
+        run: pip install -r scripts/contracts/requirements.txt
+
+      - name: Validate contracts (pull request)
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          git fetch --no-tags origin "$BASE_REF"
+          python3 scripts/contracts/validate.py --base-ref "origin/$BASE_REF"
+
+      - name: Validate contracts
+        if: github.event_name != 'pull_request'
+        run: python3 scripts/contracts/validate.py

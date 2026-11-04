@@ -1,0 +1,8 @@
+{
+  "event_id": "0190f1e2-90a1-7293-a4c5-607182930415",
+  "type": "user.created",
+  "schema_version": 1,
+  "occurred_at": "2026-11-04T21:34:00Z",
+  "publisher": "chat-service",
+  "payload": {}
+}

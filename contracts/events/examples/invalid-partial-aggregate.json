@@ -1,0 +1,8 @@
+{
+  "event_id": "0190f1e2-8f90-7182-93b4-5f6071829304",
+  "type": "conversation.member_added",
+  "schema_version": 1,
+  "occurred_at": "2026-11-04T21:33:00Z",
+  "aggregate_type": "conversation",
+  "payload": {}
+}
