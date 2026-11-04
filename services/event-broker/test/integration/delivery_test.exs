@@ -59,6 +59,32 @@ defmodule AsnEventBroker.DeliveryTest do
     Repo.query!("UPDATE subscriptions SET status = 'paused' WHERE name = $1", [name])
   end
 
+  defp capture_queries do
+    test_pid = self()
+    handler_id = "delivery-sql-#{System.unique_integer([:positive])}"
+
+    :telemetry.attach(
+      handler_id,
+      [:asn_event_broker, :repo, :query],
+      fn _event, _measurements, metadata, _ ->
+        if self() == test_pid, do: send(test_pid, {:query, metadata.query})
+      end,
+      nil
+    )
+
+    on_exit(fn -> :telemetry.detach(handler_id) end)
+
+    fn -> collect_queries([]) end
+  end
+
+  defp collect_queries(acc) do
+    receive do
+      {:query, sql} -> collect_queries([sql | acc])
+    after
+      0 -> Enum.reverse(acc)
+    end
+  end
+
   test "claim leases the earliest version and blocks later versions (head-of-line)" do
     insert_subscription("chat-identity")
     publish_aggregate_versions("chat-identity", [1, 2, 3])
@@ -221,6 +247,75 @@ defmodule AsnEventBroker.DeliveryTest do
 
   test "unknown subscriptions are not found" do
     assert {:error, :not_found} = Delivery.claim("does-not-exist", 10, 0)
+  end
+
+  test "an idle claim checks once and takes no subscription lock" do
+    insert_subscription("chat-idle")
+    queries = capture_queries()
+
+    assert {:ok, []} = Delivery.claim("chat-idle", 10, 0)
+
+    assert [sql] = queries.()
+    assert sql =~ "EXISTS"
+    refute sql =~ "FOR UPDATE"
+    refute sql =~ "UPDATE deliveries"
+  end
+
+  test "a claim at the in-flight cap does not start a claim transaction" do
+    insert_subscription("chat-capped")
+
+    attrs = fn ->
+      %{
+        "event_id" => Ecto.UUID.generate(),
+        "type" => "system.pulse",
+        "schema_version" => 1,
+        "occurred_at" => "2026-10-25T10:00:00Z",
+        "payload" => %{}
+      }
+    end
+
+    for _ <- 1..10, do: assert({:ok, :created} = Publishing.publish(attrs.(), "social-api"))
+    assert {:ok, claimed} = Delivery.claim("chat-capped", 10, 0)
+    assert length(claimed) == 10
+
+    queries = capture_queries()
+    assert {:ok, []} = Delivery.claim("chat-capped", 10, 0)
+
+    assert [sql] = queries.()
+    refute sql =~ "FOR UPDATE"
+    refute sql =~ "UPDATE deliveries"
+  end
+
+  test "pausing a subscription wakes a parked claim with :paused" do
+    insert_subscription("chat-pause-wait")
+
+    parent = self()
+
+    task =
+      Task.async(fn ->
+        receive do
+          :go -> Delivery.claim("chat-pause-wait", 10, 3_000)
+        end
+      end)
+
+    Ecto.Adapters.SQL.Sandbox.allow(Repo, parent, task.pid)
+    send(task.pid, :go)
+    Process.sleep(100)
+
+    set_paused("chat-pause-wait")
+
+    # Paused subscriptions still receive fan-out, so the publish wakes the
+    # parked claim; it must observe the pause instead of leasing.
+    attrs = %{
+      "event_id" => Ecto.UUID.generate(),
+      "type" => "user.created",
+      "schema_version" => 1,
+      "occurred_at" => "2026-10-25T10:00:00Z",
+      "payload" => %{}
+    }
+
+    assert {:ok, :created} = Publishing.publish(attrs, "social-api")
+    assert {:error, :paused} = Task.await(task, 2_000)
   end
 
   test "aggregate-less events are claimed without ordering constraints" do
