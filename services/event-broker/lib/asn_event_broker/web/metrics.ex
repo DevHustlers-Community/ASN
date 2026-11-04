@@ -3,19 +3,29 @@ defmodule AsnEventBroker.Web.Metrics do
   Prometheus text exposition (ADR 0008 §11).
 
   Counters accumulate from the broker's own `:telemetry` events into an ETS
-  table; gauge-style database state (queue depths, oldest pending age) is
-  queried at scrape time. Payloads and tokens are never part of any metric.
+  table and stay exact between scrapes. Gauge-style database state (queue
+  depths, oldest pending timestamp) is refreshed on
+  `:metrics, :gauge_interval_ms` by this process and cached in a second ETS
+  table, so `render/0` performs no database query. `/metrics` is
+  unauthenticated: a scrape-time aggregate would let any caller turn a scrape
+  into a full scan of `deliveries`.
+
+  Payloads and tokens are never part of any metric.
   """
 
   use GenServer
 
   import Ecto.Query
+  require Logger
 
   alias AsnEventBroker.Delivery.Delivery
   alias AsnEventBroker.Repo
 
   @table :asn_event_broker_metrics
+  @gauges :asn_event_broker_gauges
   @handler_id "asn-event-broker-metrics"
+  @default_gauge_interval_ms 5_000
+  @empty_gauges %{pending: 0, leased: 0, dead: 0, oldest: nil}
 
   @counter_events [
     {[:publish, :accepted], %{name: :publish_accepted_total, labels: [:type, :outcome]}},
@@ -34,6 +44,7 @@ defmodule AsnEventBroker.Web.Metrics do
   @impl true
   def init(_opts) do
     :ets.new(@table, [:named_table, :set, :public, read_concurrency: true])
+    :ets.new(@gauges, [:named_table, :set, :public, read_concurrency: true])
 
     :telemetry.attach_many(
       @handler_id,
@@ -42,8 +53,22 @@ defmodule AsnEventBroker.Web.Metrics do
       @handler_id
     )
 
-    {:ok, %{}}
+    interval_ms = gauge_interval_ms()
+    if interval_ms > 0, do: Process.send_after(self(), :refresh_gauges, 0)
+
+    {:ok, %{interval_ms: interval_ms}}
   end
+
+  @impl true
+  def handle_info(:refresh_gauges, %{interval_ms: interval_ms} = state) do
+    refresh()
+
+    if interval_ms > 0, do: Process.send_after(self(), :refresh_gauges, interval_ms)
+
+    {:noreply, state}
+  end
+
+  def handle_info(_message, state), do: {:noreply, state}
 
   @doc "Telemetry handler; attached once by this process."
   def handle_event([:asn_event_broker | event], measurements, metadata, handler_id) do
@@ -74,11 +99,33 @@ defmodule AsnEventBroker.Web.Metrics do
       :ok
   end
 
+  @doc """
+  Recomputes the cached gauges from the database.
+
+  Runs in the caller, which lets a test call it inside its sandbox checkout;
+  the scheduled refresh calls it from this process. A database failure keeps
+  the previous values instead of crashing the metrics process (and losing the
+  counters, which live in its ETS table).
+  """
+  @spec refresh() :: :ok
+  def refresh do
+    :ets.insert(@gauges, {:gauges, gauge_state()})
+    :ok
+  rescue
+    error in [DBConnection.ConnectionError, Postgrex.Error] ->
+      Logger.warning(
+        "metrics gauge refresh failed, keeping the previous values: " <>
+          Exception.message(error)
+      )
+
+      :ok
+  end
+
   @doc "Renders the Prometheus text exposition."
   @spec render() :: String.t()
   def render do
     counters = render_counters()
-    gauges = render_gauges()
+    gauges = render_gauges(cached_gauges())
 
     IO.iodata_to_binary([counters, gauges])
   end
@@ -106,9 +153,7 @@ defmodule AsnEventBroker.Web.Metrics do
     end)
   end
 
-  defp render_gauges do
-    %{pending: pending, leased: leased, dead: dead, oldest_pending: oldest} = gauge_state()
-
+  defp render_gauges(%{pending: pending, leased: leased, dead: dead, oldest: oldest}) do
     [
       gauge("pending", "pending deliveries", pending),
       gauge("leased", "in-flight (leased) deliveries", leased),
@@ -121,11 +166,22 @@ defmodule AsnEventBroker.Web.Metrics do
     ]
   end
 
+  defp cached_gauges do
+    if :ets.whereis(@gauges) == :undefined do
+      @empty_gauges
+    else
+      case :ets.lookup(@gauges, :gauges) do
+        [{:gauges, gauges}] -> gauges
+        [] -> @empty_gauges
+      end
+    end
+  end
+
   defp gauge(name, help, value) do
     "# TYPE asn_event_broker_#{name} gauge\n# HELP asn_event_broker_#{name} #{help}\nasn_event_broker_#{name} #{value}\n"
   end
 
-  # One round trip per scrape; FILTER aggregates return all four values.
+  # One round trip per refresh; FILTER aggregates return all four values.
   defp gauge_state do
     Repo.one!(
       from d in Delivery,
@@ -133,7 +189,7 @@ defmodule AsnEventBroker.Web.Metrics do
           pending: filter(count(d.id), d.state == :pending),
           leased: filter(count(d.id), d.state == :leased),
           dead: filter(count(d.id), d.state == :dead),
-          oldest_pending: filter(min(d.created_at), d.state == :pending)
+          oldest: filter(min(d.created_at), d.state == :pending)
         }
     )
   end
@@ -143,6 +199,12 @@ defmodule AsnEventBroker.Web.Metrics do
   defp oldest_pending_age(%DateTime{} = oldest) do
     now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
     DateTime.diff(now, oldest)
+  end
+
+  defp gauge_interval_ms do
+    :asn_event_broker
+    |> Application.get_env(:metrics, [])
+    |> Keyword.get(:gauge_interval_ms, @default_gauge_interval_ms)
   end
 
   defp escape(value) do

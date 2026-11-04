@@ -102,11 +102,85 @@ defmodule AsnEventBroker.Web.MetricsTest do
              ~s(asn_event_broker_publish_rejected_total{reason="invalid_envelope"} )
   end
 
-  test "gauge series reflect database state" do
-    body = AsnEventBroker.Web.Metrics.render()
-    assert body =~ "# TYPE asn_event_broker_pending gauge"
-    assert body =~ "asn_event_broker_pending "
-    assert body =~ "# TYPE asn_event_broker_oldest_pending_seconds gauge"
+  test "gauges reflect the last refresh, not the scrape-time database state" do
+    name = "metrics-gauges-#{System.unique_integer([:positive])}"
+    event_type = "metrics.gauge.ev#{System.unique_integer([:positive])}"
+
+    %Subscription{}
+    |> Subscription.changeset(%{
+      id: Ecto.UUID.generate(),
+      name: name,
+      consumer: "chat-service",
+      event_types: [event_type],
+      max_attempts: 1
+    })
+    |> Repo.insert!()
+
+    publish = fn ->
+      assert {:ok, :created} =
+               Publishing.publish(
+                 %{
+                   "event_id" => Ecto.UUID.generate(),
+                   "type" => event_type,
+                   "schema_version" => 1,
+                   "occurred_at" => "2026-10-26T10:00:00Z",
+                   "payload" => %{}
+                 },
+                 "metrics-service"
+               )
+    end
+
+    Enum.each(1..3, fn _ -> publish.() end)
+
+    assert {:ok, [_leased, dead]} = Delivery.claim(name, 2, 0)
+    assert {:ok, :dead} = Acknowledgements.nack(dead.delivery_id, dead.lease_token, "boom")
+
+    assert body_after_refresh() =~ "# TYPE asn_event_broker_pending gauge"
+    assert body_after_refresh() =~ "asn_event_broker_pending 1\n"
+    assert body_after_refresh() =~ "asn_event_broker_leased 1\n"
+    assert body_after_refresh() =~ "asn_event_broker_dead 1\n"
+    assert body_after_refresh() =~ ~r/asn_event_broker_oldest_pending_seconds \d+\n/
+
+    # A new pending delivery is invisible until the next refresh.
+    publish.()
+    assert AsnEventBroker.Web.Metrics.render() =~ "asn_event_broker_pending 1\n"
+    assert body_after_refresh() =~ "asn_event_broker_pending 2\n"
+  end
+
+  test "render performs no database query" do
+    test_pid = self()
+    handler_id = "metrics-sql-#{System.unique_integer([:positive])}"
+
+    :telemetry.attach(
+      handler_id,
+      [:asn_event_broker, :repo, :query],
+      fn _event, _measurements, _metadata, _ ->
+        send(test_pid, {:repo_query, self()})
+      end,
+      nil
+    )
+
+    on_exit(fn -> :telemetry.detach(handler_id) end)
+
+    AsnEventBroker.Web.Metrics.refresh()
+    assert_received {:repo_query, ^test_pid}
+    flush_repo_queries(test_pid)
+
+    AsnEventBroker.Web.Metrics.render()
+    refute_received {:repo_query, ^test_pid}
+  end
+
+  defp body_after_refresh do
+    AsnEventBroker.Web.Metrics.refresh()
+    AsnEventBroker.Web.Metrics.render()
+  end
+
+  defp flush_repo_queries(test_pid) do
+    receive do
+      {:repo_query, ^test_pid} -> flush_repo_queries(test_pid)
+    after
+      0 -> :ok
+    end
   end
 
   test "/metrics serves the exposition without authentication" do
