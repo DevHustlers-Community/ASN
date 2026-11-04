@@ -52,8 +52,9 @@ by the anti-join and by `deliveries_one_leased_per_aggregate`.
 ## Verification
 
 - `mix format --check-formatted`, `mix compile --warnings-as-errors` — passed.
-- `mix test` — 99 passed (3 properties, 96 tests). Re-ran with seeds 1, 2, and
-  3 — 99 passed each time. New tests:
+- `mix test` — 102 passed (3 properties, 99 tests), after merging the idle-sweep
+  pre-check from #31. Re-ran with seeds 1, 2, and 3 — 102 passed each time. New
+  tests:
   - a claim leases its whole batch in one `UPDATE` statement with distinct
     tokens;
   - a batch never leases two versions of one aggregate;
@@ -65,7 +66,7 @@ by the anti-join and by `deliveries_one_leased_per_aggregate`.
 
   | Run | cap | Drain | Batches | Claim SQL from the broker log |
   |---|---|---|---|---|
-  | before (`upstream/main`) | 10 | 216.60 s (46.17/s) | 1,000 | 38,696 ms / 10,001 statements (3.87 ms avg) |
+  | before (pre-batch `main`) | 10 | 216.60 s (46.17/s) | 1,000 | 38,696 ms / 10,001 statements (3.87 ms avg) |
   | after | 10 | 169.72 s (58.92/s) | 1,000 | 2,458 ms / 1,001 statements (2.46 ms avg) |
   | after | 100 | 148.71 s (67.25/s) | 100 | 750 ms / 101 statements (7.43 ms avg) |
 
