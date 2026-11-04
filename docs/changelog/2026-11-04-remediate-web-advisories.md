@@ -34,3 +34,9 @@ Issue #22. `bun audit` at the repository root reported 16 vulnerabilities (1 cri
 - `bun run test`: all 10 tests across 2 suites passed.
 - `bun run build:web`: production build completed cleanly with Vite 7.
 - `py scripts/ci/check-changelog.py --all`: validation passed.
+- After merging `main` (which had already merged the React 19, `happy-dom` 21,
+  `lucide-react` 1, `@types/node` 26, and `tailwind-merge` 3 Dependabot pull
+  requests), the only conflict was `bun.lock`; it was regenerated from the
+  merged `apps/web/package.json` with `bun install`. The checks above were
+  re-run after the merge: `bun install --frozen-lockfile` had no changes,
+  typecheck was clean, all 10 tests passed, and the Vite 7.3.7 build succeeded.
