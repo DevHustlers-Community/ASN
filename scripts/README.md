@@ -10,6 +10,7 @@ loudly.
 | `dev/broker-load.py` | Event-broker benchmark harness (B1-B9): plan checks, publish/claim load, backlog drain, retention, metrics, authorize. Stdlib only; local DB by default |
 | `ci/check-changelog.py` | Validate change-record names, front matter, and per-commit presence |
 | `ci/check-commit-trailer.py` | Require a `Changelog:` trailer in commit messages: `<commit-msg-file>` in the local hook, `--range BASE..HEAD` in CI |
+| `ci/check-audits.py` | Fail when `bun audit` or `mix hex.audit` reports a dependency advisory, even when the tool exits 0 |
 | `ci/check-links.py` | Verify relative links in Markdown files |
 | `db/` | Explicit migration, reset, and backup/restore helpers per service (planned) |
 | `contracts/` | Validate schemas and regenerate clients/types (planned) |
@@ -23,6 +24,7 @@ loudly.
   environment.
 - Backup scripts operate on snapshots, never on live SQLite/WAL file sets.
 
-**Status:** governance scripts, the hook installer, and the broker verify
-loop exist. Migration and contract scripts land with the next runnable
-services and the contracts tooling.
+**Status:** governance scripts (change records, commit trailers, links, and
+dependency audits), the hook installer, and the broker verify loop exist.
+Migration and contract scripts land with the next runnable services and the
+contracts tooling.
