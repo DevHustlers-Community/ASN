@@ -54,11 +54,20 @@ failing chat test could merge green.
   - `mix test --warnings-as-errors` — 6 passed.
 - `python3 scripts/ci/check-changelog.py --all`, `python3
   scripts/ci/check-links.py` — passed.
-- CI: see the pull request run for `chat.yml` on this branch.
+- CI, pull request #33: `chat` job green in 59 s; `Change records and links`
+  green.
+- Negative test, scratch pull request #34 (one deliberately failing chat test,
+  no changelog record): the `chat` job triggered from the
+  `services/chat-service/**` path filter and failed at the test step —
+  `1) test deliberately fails to prove the chat workflow goes red`,
+  `Result: 6/7 passed`. The scratch pull request and branch were deleted after
+  the run.
+- Cache restore, second execution of the same run (`gh run rerun`): the
+  `Cache deps and build` step logged
+  `Cache hit for: chat-mix-Linux-3ec837f7…` and
+  `Cache restored from key: chat-mix-Linux-3ec837f7…`, and the post step did
+  not save a duplicate.
 
 ## Follow-ups
 
-- A deliberately failing chat test on a scratch branch to confirm the workflow
-  goes red (acceptance criterion in #24).
-- Running the workflow twice to confirm the `deps`/`_build` cache restores.
 - The cross-service e2e in CI is a separate issue (#25).
