@@ -66,9 +66,16 @@ a green suite on both sides.
   step.
 - `python3 scripts/ci/check-changelog.py --all`, `python3
   scripts/ci/check-links.py` — passed.
-- CI: see the pull request run for `e2e.yml` on this branch.
+- CI, pull request #35: `chat outbox -> broker -> claim -> ack` green in 35 s
+  (well under the 10-minute timeout); `Change records and links` green.
+- Negative test, scratch pull request #36 (the claim assertion expects a
+  different event type): the job triggered from the `tests/e2e/**` path filter
+  and failed with `AssertionError: chat.device.registered` and
+  `E2E FAIL: claim assertion failed`, printing the relay log from the
+  failure-only step. The scratch pull request and branch were deleted after
+  the run.
 
 ## Follow-ups
 
-- A deliberately broken assertion on a scratch branch to confirm the job goes
-  red (acceptance criterion in #25).
+- Batching acks in the B6 harness is a separate performance issue, not an e2e
+  concern.
