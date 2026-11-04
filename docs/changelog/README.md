@@ -70,11 +70,14 @@ Then:
 Changelog: docs/changelog/2026-10-22-governance-and-changelog.md
 ```
 
-CI runs `scripts/ci/check-changelog.py` on every pull request commit and rejects
-a commit without a record, with invalid front matter, or without a `Changelog:`
-trailer that names a file changed in that commit. Pushes to `main` validate every
-record and all relative links; they do not re-check trailers on platform-created
-squash commits.
+CI runs `scripts/ci/check-changelog.py --range` on every pull request commit and
+rejects a commit without a record, with invalid front matter, or without a
+`Changelog:` trailer that names a file changed in that commit.
+`scripts/ci/check-commit-trailer.py --range` runs alongside it as the focused
+trailer gate: it reads each commit's own tree instead of the index, and it also
+rejects an empty commit with no trailer. Pushes to `main` validate every record
+and all relative links; they do not re-check trailers on platform-created squash
+commits.
 
 ## Change record, CHANGELOG.md, and ADR
 

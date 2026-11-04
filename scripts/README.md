@@ -9,7 +9,7 @@ loudly.
 | `dev/broker-verify.sh` | Full event-broker verification loop: compose PostgreSQL, wait for health, migrate, format, compile, test |
 | `dev/broker-load.py` | Event-broker benchmark harness (B1-B9): plan checks, publish/claim load, backlog drain, retention, metrics, authorize. Stdlib only; local DB by default |
 | `ci/check-changelog.py` | Validate change-record names, front matter, and per-commit presence |
-| `ci/check-commit-trailer.py` | Require a `Changelog:` trailer in commit messages |
+| `ci/check-commit-trailer.py` | Require a `Changelog:` trailer in commit messages: `<commit-msg-file>` in the local hook, `--range BASE..HEAD` in CI |
 | `ci/check-links.py` | Verify relative links in Markdown files |
 | `db/` | Explicit migration, reset, and backup/restore helpers per service (planned) |
 | `contracts/` | Validate schemas and regenerate clients/types (planned) |
