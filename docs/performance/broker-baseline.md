@@ -196,3 +196,38 @@ subprocess). Git sha `bdab65e`.
    (25,000 deliveries + 35,000 events) in 2,615 ms (~22,900 rows/s);
    full-size B7 (2M delivered + 500k dead + 1M events, ~3.5M rows seeded) is
    the next measurement once the retention worker decisions (F2) are settled.
+
+## 2026-11-04 — idle sweep cost (issue #5)
+
+Environment: same host, PostgreSQL 18.6, dedicated `broker_b5` database
+(`CREATE DATABASE broker_b5 OWNER asn_broker`, then `mix ecto.migrate`), broker
+`mix run --no-halt` on port 4004, `pool_size: 10` (dev config), Bandit 1.14.0.
+B5: 50 parked consumers, `wait_ms: 20000`, 30 s of load. Statement counts come
+from the broker's own `QUERY OK` log lines (pg_stat_statements is not enabled
+on this cluster); the harness reported HTTP-level requests and errors.
+
+| Run | Claim requests | Errors | Broker statements | Statements/s | `FOR UPDATE` lines |
+|---|---|---|---|---|---|
+| before (`upstream/main`) | 135 | 46 (34%) | 18,294 over 50.18 s | 364.6 | 6,004 |
+| after | 100 | 0 | 2,216 over 40.12 s | 55.2 | 0 |
+
+The run durations differ because errored requests returned immediately and
+retried, so the rate is the comparable figure. Per parked consumer the sweep
+cost fell from ~7.3 statements/s to ~1.1 statements/s, one check per
+`sweep_interval_ms`. The 8 `UPDATE deliveries` lines in the after log are the
+lease reaper's every-5-second pass over an empty lease set, not claims.
+
+Idle check plan on `broker_bench` (1,000,000 deliveries plus 1,000 leased
+rows for another subscription): the leased count uses a bitmap index scan on
+`deliveries_one_leased_per_aggregate`, the claimable probe uses
+`deliveries_subscription_id_next_attempt_at_index`, and the whole check runs in
+0.295 ms warm. The outer `subscriptions` lookup was a sequential scan only
+because the bench table has two rows.
+
+### Decision
+
+`pool_size: 10` is enough for 50 parked consumers: 0 connection errors and no
+lock acquisition while idle, so no default change is needed. The remaining B6
+drain throughput (68.64/s) is a different problem — claimed batches, not idle
+sweeps — and stays with issues #6 and #9.
+

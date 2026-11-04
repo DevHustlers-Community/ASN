@@ -282,6 +282,26 @@ The first purge runs one full interval after boot — there is no immediate
 tick at start (the same schedule as the lease reaper). Defaults are from
 [ADR 0008 §8](../../docs/decisions/0008-broker-transport-and-delivery-contract.md).
 
+### Long-poll claims
+
+A claim first runs one cheap check that returns the subscription status, its
+leased count, and whether any delivery is claimable (the same head-of-line and
+`next_attempt_at` rules as the claim itself). A parked consumer with nothing
+claimable runs one statement per `sweep_interval_ms` and takes no `FOR UPDATE`
+lock; the claim transaction (row lock, in-flight count, and
+`UPDATE ... FOR UPDATE SKIP LOCKED`) only starts when the check says a claim is
+possible.
+
+The wake race is closed without a second full claim attempt: the process joins
+the wakeup registry before the check, so a publish that commits after the check
+leaves a `:wake` in the mailbox. Wakes that arrived before the check are
+flushed because the check already observed them.
+
+At 50 parked consumers with `pool_size: 10`, this took the broker from ~7.3 to
+~1.1 statements/s per consumer and removed the connection errors recorded in
+the 2026-10-28 baseline; see
+[`docs/performance/broker-baseline.md`](../../docs/performance/broker-baseline.md).
+
 ## Boundaries
 
 - Only the broker reads or writes `broker_db`. No business service gets a
