@@ -8,7 +8,7 @@
 | [`workflows/broker.yml`](workflows/broker.yml) | Event broker: format, compile with warnings as errors, and tests on disposable PostgreSQL 18 |
 | [`workflows/chat.yml`](workflows/chat.yml) | Chat service: format, compile with warnings as errors, and tests on disposable PostgreSQL 18 |
 | [`workflows/e2e.yml`](workflows/e2e.yml) | Cross-service e2e: chat outbox → relay → broker publish → claim → ack → `/metrics`, on disposable PostgreSQL 18 |
-| [`workflows/security.yml`](workflows/security.yml) | Secret scanning with gitleaks: pull request commits, and the full history on `main` |
+| [`workflows/security.yml`](workflows/security.yml) | Secret scanning with gitleaks and dependency audits (`bun audit`, `mix hex.audit`): pull requests, `main`, and a weekly schedule |
 | [`ISSUE_TEMPLATE/`](ISSUE_TEMPLATE/) | Bug, feature, and ADR-request forms |
 | [`PULL_REQUEST_TEMPLATE.md`](PULL_REQUEST_TEMPLATE.md) | Review, contract, security, and verification checklist |
 | [`CODEOWNERS`](CODEOWNERS) | Ownership by service, app, contract, and governance path |
@@ -21,7 +21,10 @@
 - Filename and front-matter rules pass.
 - Relative documentation links resolve.
 - Pull request commits and the full history on `main` are scanned for secrets
-  with gitleaks (see [`workflows/security.yml`](workflows/security.yml)).
+  with gitleaks, and dependency advisories fail the build for the Bun workspace
+  and both Elixir services (see
+  [`workflows/security.yml`](workflows/security.yml)). A weekly scheduled run
+  catches advisories disclosed without a code change.
 - OpenAPI documents and event schemas are validated, and a pull request that
   removes an OpenAPI path, operation, or required field without an
   `info.version` bump fails (see [`workflows/contracts.yml`](workflows/contracts.yml)).
@@ -35,11 +38,12 @@
 - TypeScript: typecheck, lint, and unit tests for apps and Bun services.
 - Elixir: format, compile with warnings as errors, and tests.
 - Integration tests for cross-service flows touched by the change.
-- Dependency review.
 
 **Rules:**
 
 - Workflows never print secrets or full evidence payloads.
+- Every workflow declares `permissions: contents: read`, a per-workflow
+  concurrency group that cancels superseded runs, and a job timeout.
 - Database-backed jobs use disposable PostgreSQL instances, one per service.
 - A failing contract or change-record check blocks merge; it is not overridden by
   a code label.

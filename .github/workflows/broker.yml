@@ -18,6 +18,13 @@ on:
       - '.tool-versions'
       - '.github/workflows/broker.yml'
 
+permissions:
+  contents: read
+
+concurrency:
+  group: broker-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   POSTGRES_USER: postgres
   POSTGRES_PASSWORD: postgres
@@ -31,6 +38,7 @@ env:
 jobs:
   broker:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     services:
       postgres:
