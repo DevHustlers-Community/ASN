@@ -29,7 +29,7 @@
   },
   "devDependencies": {
     "@asn/config-typescript": "workspace:*",
-    "@types/node": "^22.8.1",
+    "@types/node": "^26.6.6",
     "@types/phoenix": "^1.6.5",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^19.3.0",
