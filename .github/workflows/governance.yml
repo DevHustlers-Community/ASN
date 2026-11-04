@@ -17,6 +17,10 @@ jobs:
   change-records:
     name: Change records and links
     runs-on: ubuntu-latest
+    # Dependabot cannot author a change record or a Changelog trailer. Its
+    # pull requests only touch manifests and lockfiles; the diff is reviewed in
+    # the pull request, and the dependency workflows still run their tests.
+    if: github.actor != 'dependabot[bot]'
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
