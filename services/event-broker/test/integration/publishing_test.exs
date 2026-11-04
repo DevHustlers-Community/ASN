@@ -2,7 +2,7 @@ defmodule AsnEventBroker.PublishingTest do
   use AsnEventBroker.DataCase, async: true
 
   alias AsnEventBroker.Delivery.Delivery
-  alias AsnEventBroker.Events.Event
+  alias AsnEventBroker.Events.{Envelope, Event}
   alias AsnEventBroker.Publishing
   alias AsnEventBroker.Repo
   alias AsnEventBroker.Subscriptions.Subscription
@@ -64,6 +64,65 @@ defmodule AsnEventBroker.PublishingTest do
     assert {:ok, :created} = Publishing.publish(event_attrs(), "social-api")
     assert {:ok, :duplicate} = Publishing.publish(event_attrs(), "social-api")
     assert length(Repo.all(Delivery)) == 1
+  end
+
+  # Independent canonicalization (recursively key-sorted JSON) so the stored
+  # hash is checked against the value's definition, not just against the same
+  # `Envelope.content_hash/1` call the publish path was refactored around.
+  defp canonical_json(value) when is_map(value) do
+    %Jason.OrderedObject{
+      values:
+        value
+        |> Enum.map(fn {key, inner} -> {to_string(key), canonical_json(inner)} end)
+        |> Enum.sort()
+    }
+  end
+
+  defp canonical_json(value), do: value
+
+  test "stores the canonical content hash unchanged for nested, out-of-order payloads" do
+    insert_subscription("chat-identity")
+
+    attrs =
+      event_attrs(%{
+        "occurred_at" => "2026-10-25T10:00:00.123456Z",
+        "payload" => %{
+          "body" => %{"zzz" => [3, 1, 2], "aaa" => %{"bb" => 2, "aa" => 1}},
+          "title" => "nested"
+        }
+      })
+
+    assert {:ok, :created} = Publishing.publish(attrs, "social-api")
+
+    {:ok, occurred_at, _offset} = DateTime.from_iso8601("2026-10-25T10:00:00.123456Z")
+    occurred_at = %{occurred_at | microsecond: {123_456, 6}}
+
+    expected =
+      :crypto.hash(
+        :sha256,
+        Jason.encode!(
+          canonical_json(%{
+            "event_id" => @event_id,
+            "type" => "user.created",
+            "schema_version" => 1,
+            "occurred_at" => DateTime.to_iso8601(occurred_at),
+            "aggregate_type" => nil,
+            "aggregate_id" => nil,
+            "aggregate_version" => nil,
+            "trace_id" => nil,
+            "payload" => attrs["payload"]
+          })
+        )
+      )
+      |> Base.encode16(case: :lower)
+
+    assert %{content_hash: stored_hash} = Repo.get!(Event, @event_id)
+
+    # Stored value matches the canonical-hash definition computed from scratch
+    # above and the `Envelope.content_hash/1` value the publish path passes in.
+    assert stored_hash == expected
+    {:ok, envelope} = Envelope.validate(attrs)
+    assert stored_hash == Envelope.content_hash(envelope)
   end
 
   test "equivalent timestamp representations are the same event, not a conflict" do

@@ -25,7 +25,19 @@ defmodule AsnEventBroker.Events.Event do
     field :received_at, :utc_datetime_usec
   end
 
-  def new_from_envelope(%AsnEventBroker.Events.Envelope{} = envelope, publisher, received_at) do
+  @doc """
+  Builds an event from a validated envelope.
+
+  `content_hash` must be the already-computed canonical envelope hash
+  (`AsnEventBroker.Events.Envelope.content_hash/1`); the builder never
+  recomputes it, so one publish canonicalizes the envelope exactly once.
+  """
+  def new_from_envelope(
+        %AsnEventBroker.Events.Envelope{} = envelope,
+        publisher,
+        received_at,
+        content_hash: content_hash
+      ) do
     %__MODULE__{
       event_id: envelope.event_id,
       type: envelope.type,
@@ -36,7 +48,7 @@ defmodule AsnEventBroker.Events.Event do
       aggregate_version: envelope.aggregate_version,
       trace_id: envelope.trace_id,
       payload: envelope.payload,
-      content_hash: AsnEventBroker.Events.Envelope.content_hash(envelope),
+      content_hash: content_hash,
       publisher: publisher,
       received_at: received_at
     }
