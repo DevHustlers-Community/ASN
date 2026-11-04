@@ -1,0 +1,89 @@
+name: Chat
+
+on:
+  pull_request:
+    paths:
+      - 'services/chat-service/**'
+      - 'infrastructure/postgres/**'
+      - 'compose.yaml'
+      - '.tool-versions'
+      - '.github/workflows/chat.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'services/chat-service/**'
+      - 'infrastructure/postgres/**'
+      - 'compose.yaml'
+      - '.tool-versions'
+      - '.github/workflows/chat.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chat-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  POSTGRES_USER: postgres
+  POSTGRES_PASSWORD: postgres
+  ASN_DB_PASSWORD: postgres
+  PGHOST: localhost
+  PGUSER: postgres
+  PGPASSWORD: postgres
+  CHAT_DATABASE_URL: postgres://asn_chat:postgres@localhost:5432/chat_db
+  CHAT_TEST_DATABASE_URL: postgres://asn_chat:postgres@localhost:5432/chat_db_test
+
+jobs:
+  chat:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:18.6-alpine3.24
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: '1.20.4'
+          otp-version: '29.1.2'
+
+      - name: Create service roles and databases
+        run: sh infrastructure/postgres/init/01-create-databases.sh
+
+      - name: Cache deps and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            services/chat-service/deps
+            services/chat-service/_build
+          key: chat-mix-${{ runner.os }}-${{ hashFiles('services/chat-service/mix.lock') }}
+          restore-keys: |
+            chat-mix-${{ runner.os }}-
+
+      - name: Fetch dependencies
+        working-directory: services/chat-service
+        run: mix deps.get
+
+      - name: Verify format, compile, and test
+        working-directory: services/chat-service
+        run: |
+          mix ecto.create
+          mix ecto.migrate
+          mix format --check-formatted
+          mix compile --warnings-as-errors
+          mix test --warnings-as-errors
