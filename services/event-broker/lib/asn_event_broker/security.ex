@@ -130,16 +130,15 @@ defmodule AsnEventBroker.Security do
     # `service_credentials(token_hash)` index) with the revoked/expired
     # filters in SQL. A missing row, a revoked row, and an expired row all
     # return the same shape from here on — no distinguishing exit — and the
-    # constant-time comparison on the returned row is kept (a matching row
-    # cannot mismatch at this point, but the compare stays as the
-    # authorization decision, not an index assumption).
-    case Repo.one(
-           from c in ServiceCredential,
-             where:
-               c.token_hash == ^presented and
-                 is_nil(c.revoked_at) and
-                 (is_nil(c.expires_at) or c.expires_at > ^now())
-         ) do
+    # constant-time comparison on the returned row is kept as defence in
+    # depth (ADR 0008 §9): the SQL equality on the unique index already
+    # determines the row, but nothing in the authorization decision relies
+    # on the query plan being what the reader expects.
+    #
+    # The unique index makes a duplicate `token_hash` impossible, so
+    # `Repo.one/1` can return at most one row; if that invariant were ever
+    # broken, fail closed instead of surfacing a 500.
+    case lookup(presented) do
       nil ->
         {:error, :unauthorized}
 
@@ -151,6 +150,26 @@ defmodule AsnEventBroker.Security do
   end
 
   def authorize(_), do: {:error, :unauthorized}
+
+  defp lookup(presented) do
+    Repo.one(
+      from c in ServiceCredential,
+        where:
+          c.token_hash == ^presented and
+            is_nil(c.revoked_at) and
+            (is_nil(c.expires_at) or c.expires_at > ^now())
+    )
+  rescue
+    exception in Ecto.MultipleResultsError ->
+      # A duplicate `token_hash` would violate the unique index; treat it as
+      # an unauthorized request and keep the invariant visible in the logs.
+      Logger.error(
+        "authorize: multiple active credentials share a token_hash " <>
+          "(unique index invariant broken): #{Exception.message(exception)}"
+      )
+
+      nil
+  end
 
   defp hash_equals(a, b) when byte_size(a) == byte_size(b) do
     :crypto.hash_equals(a, b)

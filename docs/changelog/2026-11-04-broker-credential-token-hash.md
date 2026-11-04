@@ -35,10 +35,12 @@ broker CPU 217% in earlier runs), and the unique index on
 
 Timing safety: the presented bearer token is attacker-controlled and the set
 of issued token hashes is not secret, so using the unique index lookup does
-not disclose valid credentials — an attacker can already probe the index at
-leisure without the change. There is no early return that distinguishes a
-missing row from a row failing the revoked/expired filters, and the
-constant-time compare on the returned row is retained. The lookup itself
+not disclose valid credentials — an attacker can already probe the HTTP
+endpoint at will without the change, and the endpoint's answer set (valid
+versus everything else) is unchanged. There is no early return that
+distinguishes a missing row from a row failing the revoked/expired filters,
+and the constant-time compare on the returned row is retained (defence in
+depth per ADR 0008 §9, not the authorization decision itself). The lookup
 runs one indexed `token_hash = $1` comparison in PostgreSQL and leaks
 nothing about non-matching credentials.
 
@@ -46,7 +48,9 @@ nothing about non-matching credentials.
 
 - `mix format --check-formatted` — passed.
 - `mix compile --warnings-as-errors` — passed.
-- `mix test` — 93 passed (3 properties, 90 tests), no failures.
+- `mix test` — 94 passed (3 properties, 91 tests), no failures. Includes a
+  regression test asserting the authorization query is a single indexed
+  `token_hash` lookup, so a table-scan regression cannot return unnoticed.
 - `EXPLAIN (ANALYZE, BUFFERS)` on `broker_bench` (100 seeded credentials):
   new lookup is an `Index Scan using service_credentials_token_hash_index`
   with `Index Cond: (token_hash = ...)` (2 shared-buffer hits); the previous
@@ -55,7 +59,8 @@ nothing about non-matching credentials.
   `broker_bench` database, 100 credentials, before vs after, two samples
   each): broker CPU 169.52%/181.71% before, 118.02%/120.5% after (roughly
   -30% relative). Achieved request rate stayed in the same band
-  (381–407 rps before, 346–350 rps after): at B9's scale the remaining
+  (381–407 rps before, 346–350 rps after), with one after-sample recording
+  9 HTTP 500s out of 5000 acks; at B9's scale the remaining
   bottleneck is socket/pool contention between the drive POST and the ack
   UPDATE (connection-queue waits of 50–100 ms dominate p50), so throughput
   does not rise from this change alone while broker CPU per request drops

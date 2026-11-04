@@ -52,6 +52,47 @@ defmodule AsnEventBroker.SecurityTest do
     assert {:error, :unauthorized} = Security.authorize("Bearer ")
   end
 
+  test "authorization probes the token hash (single indexed lookup, no table scan)" do
+    {:ok, issued} = Security.issue("probe-service", [:publish])
+    test_pid = self()
+
+    handler_id = "probe-sql-#{System.unique_integer()}"
+
+    :telemetry.attach_many(
+      handler_id,
+      [[:asn_event_broker, :repo, :query]],
+      fn _event, _measurements, metadata, _ ->
+        send(test_pid, {:sql, metadata.query})
+      end,
+      nil
+    )
+
+    on_exit(fn -> :telemetry.detach(handler_id) end)
+
+    assert {:ok, _credential} = Security.authorize("Bearer " <> issued.token)
+    Process.sleep(50)
+
+    queries =
+      collect_sql()
+      |> Enum.filter(&String.contains?(String.downcase(&1), "service_credentials"))
+
+    # A table-wide scan must never come back: the lookup is one statement
+    # whose WHERE predicates on the indexed `token_hash` column.
+    assert length(queries) == 1
+
+    [query] = queries
+    assert String.contains?(String.downcase(query), "token_hash")
+    refute String.contains?(String.downcase(query), "revoked_at is null")
+  end
+
+  defp collect_sql do
+    receive do
+      {:sql, query} -> [query | collect_sql()]
+    after
+      0 -> []
+    end
+  end
+
   test "scope and event-type checks operate on the authorized credential" do
     {:ok, issued} =
       Security.issue("test-service", [:consume], allowed_event_types: ["report.created"])
