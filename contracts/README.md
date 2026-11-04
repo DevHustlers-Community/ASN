@@ -21,3 +21,17 @@ The single source of truth for communication between services and clients.
 - Schemas never contain plaintext chat content, private keys, recovery secrets,
   or raw backup data.
 - A contract change that affects persisted state requires an ADR first.
+
+## Validation
+
+[`scripts/contracts/validate.py`](../scripts/contracts/validate.py) validates the
+OpenAPI documents, resolves every `$ref`, checks the broker `EventEnvelope`
+against the shared envelope schema, and validates the event examples under
+[`events/examples/`](events/examples/README.md). On pull requests it also
+rejects a removed path, operation, or required field that does not bump
+`info.version`.
+
+Run it locally with the pinned tooling in
+[`scripts/contracts/`](../scripts/contracts/README.md); CI runs the same entry
+point from [`.github/workflows/contracts.yml`](../.github/workflows/contracts.yml)
+whenever `contracts/` or `scripts/contracts/` changes.

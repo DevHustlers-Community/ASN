@@ -1,0 +1,7 @@
+{
+  "event_id": "0190f1e2-a1b2-73a4-b5d6-718293041526",
+  "type": "User.Created",
+  "schema_version": 1,
+  "occurred_at": "2026-11-04T21:35:00Z",
+  "payload": {}
+}

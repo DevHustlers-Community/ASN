@@ -11,7 +11,11 @@ communities, real-time chat, and end-to-end encrypted messaging.
 
 **Current state:** architecture and incremental service scaffolding. The Chat
 service and Event broker have Elixir manifests, pin Elixir 1.20.4/OTP 29.1.2,
-compile, and run against PostgreSQL 18.6. The web client (apps/web) and shared TypeScript presets (packages/config-typescript) are scaffolded under Bun 1.4.4. There are no product endpoints, OpenAPI or event contracts, migrations, or backend TypeScript service manifests yet. Do not assume a product feature is runnable.
+compile, and run against PostgreSQL 18.6. The web client (apps/web) and shared
+TypeScript presets (packages/config-typescript) are scaffolded under Bun 1.4.4.
+The event-broker OpenAPI contract, the shared event envelope, and the
+broker/chat migrations are in place. There are no product endpoints or backend
+TypeScript service manifests yet. Do not assume a product feature is runnable.
 
 **License:** AGPL-3.0.
 
@@ -206,7 +210,7 @@ Detect commands from manifests; do not invent them.
 | Elixir (Chat) | `cd services/chat-service && mix deps.get && mix format --check-formatted && mix compile --warnings-as-errors && mix test` | Available; `mix test` requires local PostgreSQL |
 | Elixir (broker) | `cd services/event-broker && mix deps.get && mix format --check-formatted && mix compile --warnings-as-errors && mix test` | Available; `mix test` requires local PostgreSQL |
 | Local PostgreSQL | `docker compose up -d postgres`; wait for `healthy` | Available |
-| Contracts | validation and client generation via `scripts/contracts/` | Not implemented |
+| Contracts | `python3 scripts/contracts/validate.py --base-ref origin/main` (deps: `pip install -r scripts/contracts/requirements.txt`) | Validation available; client generation not implemented |
 | Change records | `python3 scripts/ci/check-changelog.py --all`; `python3 scripts/ci/check-commit-trailer.py <msg-file>` | Available |
 | Docs | `python3 scripts/ci/check-links.py`; no contradictory statements | Available |
 

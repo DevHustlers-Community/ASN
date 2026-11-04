@@ -11,8 +11,8 @@ loudly.
 | `ci/check-changelog.py` | Validate change-record names, front matter, and per-commit presence |
 | `ci/check-commit-trailer.py` | Require a `Changelog:` trailer in commit messages: `<commit-msg-file>` in the local hook, `--range BASE..HEAD` in CI |
 | `ci/check-links.py` | Verify relative links in Markdown files |
+| `contracts/validate.py` | Validate OpenAPI documents, `$ref`s, event schemas, and envelope examples; reject breaking changes without a version bump on pull requests |
 | `db/` | Explicit migration, reset, and backup/restore helpers per service (planned) |
-| `contracts/` | Validate schemas and regenerate clients/types (planned) |
 
 **Rules:**
 
@@ -23,6 +23,6 @@ loudly.
   environment.
 - Backup scripts operate on snapshots, never on live SQLite/WAL file sets.
 
-**Status:** governance scripts, the hook installer, and the broker verify
-loop exist. Migration and contract scripts land with the next runnable
-services and the contracts tooling.
+**Status:** governance scripts, the hook installer, the broker verify loop, and
+contract validation exist. Client generation and migration scripts land with
+the next runnable services and the contracts tooling.

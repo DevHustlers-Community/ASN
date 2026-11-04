@@ -20,8 +20,10 @@ One OpenAPI 3.x file per REST service.
   there is no plaintext body field.
 - Response types are generated into [`packages/api-client`](../../packages/api-client/README.md).
 
-**CI:** lint (e.g. Redocly/Spectral), breaking-change detection against the base
-branch, and client generation drift check.
+**CI:** [`scripts/contracts/validate.py`](../../scripts/contracts/validate.py)
+validates every file with `openapi-spec-validator`, resolves every `$ref`, and
+rejects a removed path, operation, or required field without an `info.version`
+bump on pull requests. Client generation drift checks are not implemented yet.
 
 **Status:** not written yet for the business services; authoring starts with
 the Social API and Chat endpoints needed by the first vertical slice. The

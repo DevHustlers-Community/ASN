@@ -5,6 +5,8 @@ Versioned JSON Schema payloads plus the shared envelope.
 ```
 events/
 ├── common/event-envelope.schema.json
+├── examples/valid-*.json
+├── examples/invalid-*.json
 ├── social/*.v1.schema.json
 ├── chat/*.v1.schema.json
 └── moderation/*.v1.schema.json
@@ -16,6 +18,10 @@ events/
 
 **Rules:**
 
+- [`examples/`](examples/README.md) holds `valid-*.json` fixtures that must
+  satisfy the envelope and `invalid-*.json` fixtures that must be rejected by
+  it. [`scripts/contracts/validate.py`](../../scripts/contracts/validate.py)
+  enforces both directions.
 - `event_id` is stable across outbox retries and broker redelivery.
 - `aggregate_version` is monotonic per aggregate; consumers reject older values.
 - Payloads carry identifiers and small deltas only. Large content uses a
@@ -27,9 +33,10 @@ events/
   [the event catalog](../../docs/architecture/architecture-and-schema.md)
   gets a schema before its producer is implemented.
 
-**Status:** the envelope schema has landed
-([`common/event-envelope.schema.json`](common/event-envelope.schema.json)).
-Per-event payload schemas land before their producers are implemented.
+**Status:** the envelope schema and its valid/invalid examples have landed
+([`common/event-envelope.schema.json`](common/event-envelope.schema.json),
+[`examples/`](examples/README.md)). Per-event payload schemas land before their
+producers are implemented.
 
 ## Transport notes ([ADR 0008](../../docs/decisions/0008-broker-transport-and-delivery-contract.md))
 
