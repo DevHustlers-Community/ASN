@@ -6,6 +6,7 @@
 | [`workflows/web.yml`](workflows/web.yml) | Web client: typecheck, tests, and build under Bun |
 | [`workflows/broker.yml`](workflows/broker.yml) | Event broker: format, compile with warnings as errors, and tests on disposable PostgreSQL 18 |
 | [`workflows/chat.yml`](workflows/chat.yml) | Chat service: format, compile with warnings as errors, and tests on disposable PostgreSQL 18 |
+| [`workflows/e2e.yml`](workflows/e2e.yml) | Cross-service e2e: chat outbox → relay → broker publish → claim → ack → `/metrics`, on disposable PostgreSQL 18 |
 | [`workflows/security.yml`](workflows/security.yml) | Secret scanning with gitleaks: pull request commits, and the full history on `main` |
 | [`ISSUE_TEMPLATE/`](ISSUE_TEMPLATE/) | Bug, feature, and ADR-request forms |
 | [`PULL_REQUEST_TEMPLATE.md`](PULL_REQUEST_TEMPLATE.md) | Review, contract, security, and verification checklist |
@@ -39,7 +40,8 @@
 - A failing contract or change-record check blocks merge; it is not overridden by
   a code label.
 
-**Status:** governance automation and the web, broker, chat, and security
-workflows are written. Remaining service workflows (Social, Moderation) land with
+**Status:** governance automation and the web, broker, chat, cross-service e2e,
+and security workflows are written. Remaining service workflows (Social,
+Moderation) land with
 their first manifests; contract validation and client-generation checks land with
 the contracts tooling.
