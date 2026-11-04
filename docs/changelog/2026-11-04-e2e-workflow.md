@@ -30,6 +30,14 @@ contracts: -
 - Database URLs are passed through `E2E_BROKER_DATABASE_URL`,
   `E2E_BROKER_TEST_DATABASE_URL`, and `E2E_CHAT_DATABASE_URL` because the
   script's defaults use the local `change_me` password.
+- `tests/e2e/broker-relay.sh`: the three URLs are now `export`ed instead of
+  assigned as shell variables. The migration step reads
+  `BROKER_DATABASE_URL="$URL" mix ecto.create && mix ecto.migrate`, and a
+  `VAR=... cmd1 && cmd2` prefix scopes the variable to `cmd1` only, so
+  `mix ecto.migrate` fell back to the `change_me` default in the config. That
+  matched the local compose password and hid the bug; against a disposable
+  database with a different password the migration failed with
+  `password authentication failed for user "asn_broker"`.
 - [`/.github/README.md`](../../.github/README.md): listed the e2e workflow and
   updated the status line.
 
@@ -47,6 +55,13 @@ a green suite on both sides.
 - `bash tests/e2e/broker-relay.sh` locally against PostgreSQL 18.6
   (`asn-postgres-1` healthy): `E2E PASS: chat outbox -> relay -> broker ->
   claim -> ack -> metrics` in 13.5 s with warm `deps`/`_build`.
+- Regression for the export fix: with the local `asn_broker`/`asn_chat` roles
+  temporarily set to password `postgres` and the `E2E_*` URLs pointing at
+  them, the script failed before the fix with the same
+  `DBConnection.ConnectionError` in `Ecto.Migrator` and the same
+  `password authentication failed for user "asn_broker"` lines CI showed, and
+  passed after it. The local passwords were restored to `change_me` and the
+  script passes with the defaults again.
 - The workflow YAML parses; one job with seven steps plus the failure-only log
   step.
 - `python3 scripts/ci/check-changelog.py --all`, `python3

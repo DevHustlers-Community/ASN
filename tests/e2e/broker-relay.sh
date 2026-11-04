@@ -19,6 +19,11 @@ BROKER_DATABASE_URL="${E2E_BROKER_DATABASE_URL:-postgres://asn_broker:change_me@
 BROKER_TEST_DATABASE_URL="${E2E_BROKER_TEST_DATABASE_URL:-postgres://asn_broker:change_me@localhost:5432/broker_db_test}"
 CHAT_DATABASE_URL="${E2E_CHAT_DATABASE_URL:-postgres://asn_chat:change_me@localhost:5432/chat_db}"
 
+# Export, not just assign: `VAR=... cmd1 && cmd2` scopes the variable to cmd1
+# only, so a chained `mix ecto.migrate` would fall back to the config defaults
+# and fail to authenticate whenever the role password is not `change_me`.
+export BROKER_DATABASE_URL BROKER_TEST_DATABASE_URL CHAT_DATABASE_URL
+
 fail() { echo "E2E FAIL: $*" >&2; exit 1; }
 
 BROKER_PID=""
