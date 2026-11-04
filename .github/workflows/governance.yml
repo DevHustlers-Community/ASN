@@ -36,6 +36,14 @@ jobs:
           git fetch --no-tags origin "$BASE_REF"
           python3 scripts/ci/check-changelog.py --range "origin/$BASE_REF..HEAD"
 
+      - name: Validate Changelog trailers in pull request commits
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          git fetch --no-tags origin "$BASE_REF"
+          python3 scripts/ci/check-commit-trailer.py --range "origin/$BASE_REF..HEAD"
+
       - name: Validate all change records
         run: python3 scripts/ci/check-changelog.py --all
 
