@@ -246,6 +246,74 @@ mix compile --warnings-as-errors
 mix test
 ```
 
+## Performance
+
+The harness, scenario definitions, safety rules, and every recorded run live in
+[`docs/performance/broker-baseline.md`](../../docs/performance/broker-baseline.md).
+This section summarises the sizing guidance and the decisions the measurements
+support; record new runs in that document, not here.
+
+### Connection pool sizing
+
+`POOL_SIZE` sets the Ecto pool size (prod default `10`; `config/dev.exs` also
+uses `10`, `config/test.exs` uses `System.schedulers_online() * 2`). Size it
+against **concurrent database work**, not against the number of connected
+consumers:
+
+- A publish, claim, or ack holds one connection for the duration of its
+  transaction. `pool_size` should cover the request concurrency that can be
+  inside the database at once, plus a small margin for the retention worker, the
+  lease reaper, and the metrics gauge refresh.
+- A parked long-poll consumer does **not** hold a connection while it waits: it
+  runs one cheap check per `sweep_interval_ms` and opens a claim transaction only
+  when the check sees work. That is why 50 parked consumers run on
+  `pool_size: 10` with zero errors — 2,216 statements over 40.12 s (~1.1/s per
+  consumer) and no `FOR UPDATE` while idle.
+- Before the idle-sweep fix, the same 50 consumers produced 46 connection errors
+  out of 135 claim requests (34%) on the same pool. Pool queueing surfaces as
+  `DBConnection.ConnectionError` after the queue timeout, not as a clear "pool
+  full" error.
+- Raising the pool is not the first lever under claim pressure: batch claims
+  with `max_in_flight` (a 100-row claim measured 7.43 ms) and keep ack
+  concurrency bounded, because each ack is its own transaction (~10 ms
+  measured).
+- Keep the total connections across broker instances below PostgreSQL
+  `max_connections`, including migrations and `psql` sessions.
+
+### Running the harness safely
+
+Full commands and the dedicated-database setup are in the
+[baseline document](../../docs/performance/broker-baseline.md#running). The
+rules that matter:
+
+- Never point the harness at production. It only seeds and deletes rows whose
+  subscription name starts with `bench-`, and it refuses a non-local database
+  host unless `--allow-nonlocal` is passed.
+- **Never pass `--allow-shared-db` for B7.** B7 runs the global retention purge,
+  which deletes every expired non-`bench-` row. Run it against a dedicated
+  `broker_bench` database (or another disposable one): there the guard sees zero
+  non-benchmark expired rows and B7 runs without the flag. B6 also benefits from
+  a broker serving only benchmark traffic.
+- HTTP scenarios (B2-B6, B8, B9) need a running broker and an admin token:
+  `--token`, or `BROKER_ADMIN_TOKEN` in the environment. B1 and B7 need only
+  PostgreSQL.
+- Run one harness invocation at a time per database: cleanup is global to the
+  `bench-` prefix, so concurrent runs interfere.
+- Start B6/B7 at `--rows 10000` to prove the flow, then scale. The defaults are
+  1,000,000 pending rows for B6 and 3.5M seeded rows for B7.
+
+### Recorded results and decisions
+
+| Run | Measurement | Decision |
+|---|---|---|
+| 2026-10-28, shared dev DB | B5: 50 parked consumers, 46/135 claim requests failed on `pool_size: 10`; B8 `/metrics` p95 26.3 ms at 100k rows | Idle sweep and metrics were real bottlenecks; both fixed (issues #5, #4) |
+| 2026-11-02, `broker_bench` | B6 10k rows: 68.64/s; B7 10k base: 60,000 rows purged in 2,615 ms (~22,900 rows/s), `allow_shared_db: false` | Dedicated database is the safe default; drain throughput was the open problem |
+| 2026-11-04, batched claims (#9) | B6 10k rows: 148.71 s at cap 100 (67.25/s), claim 7.43 ms; SQL-only 100k: 4,463/s | Claim is one statement; the HTTP drain is ack-bound; `max_in_flight` stays 10 by default and cap 100 scales |
+| 2026-11-04, idle sweep (#5) | B5: 0 errors, 55.2 statements/s total, 0 `FOR UPDATE` while idle | `pool_size: 10` is enough for 50 parked consumers; no default change |
+
+The detailed tables, environment, and per-run decisions are in
+[`docs/performance/broker-baseline.md`](../../docs/performance/broker-baseline.md).
+
 ## Configuration
 
 | Variable | Used by | Notes |
