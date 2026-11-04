@@ -71,8 +71,15 @@ Two implementation choices differ from the issue text:
   and minor/patch groups.
 - `python3 scripts/ci/check-links.py` and `python3
   scripts/ci/check-changelog.py --all` → pass.
-- CI and the negative test: see the pull request and the change record update
-  after the workflow runs.
+- CI, pull request #40: `gitleaks` green in 5 s (`Scan pull request commits`:
+  1 commit, no leaks; full-history step skipped on `pull_request`); `Change
+  records and links` green in 9 s.
+- Negative test, scratch pull request #41: a commit adding a fake generic API
+  key failed the `gitleaks` job in 5 s with `RuleID: generic-api-key`,
+  `Finding: api_key = "REDACTED"`, and exit code `1`; the `Change records and
+  links` job also failed, as expected for a commit with no record or trailer.
+  The scratch pull request and branch were deleted after the run. The value was
+  generated for the test and was never a real credential.
 
 ## Follow-ups
 
