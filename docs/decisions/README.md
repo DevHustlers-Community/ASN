@@ -34,6 +34,7 @@ Every significant, hard-to-reverse decision gets one numbered ADR.
 
 | ID | Subject | Status |
 |---|---|---|
+| [0007](0007-e2ee-protocol-selection.md) | E2EE protocol selection (MLS/RFC 9420) | proposed |
 | [0008](0008-broker-transport-and-delivery-contract.md) | Broker transport and delivery contract | accepted |
 | [0011](0011-elixir-and-postgres-baseline.md) | Elixir and PostgreSQL baseline | accepted |
 | [0012](0012-frontend-design-system-and-theming.md) | Frontend design system and theming | proposed |
@@ -48,10 +49,10 @@ Every significant, hard-to-reverse decision gets one numbered ADR.
 | 0004 | Custom Elixir/OTP event broker instead of an off-the-shelf broker |
 | 0005 | PostgreSQL as first broker storage |
 | 0006 | React Native mobile client and encrypted local SQLite |
-| 0007 | E2EE protocol selection (Signal/Sesame vs MLS) |
 | 0009 | Opaque envelope contract from day one |
 | 0010 | Web E2EE parity policy |
 
-**Status:** 0008 and 0011 are accepted. 0012 is proposed. 0001-0006 are effectively settled
-by the architecture document and should be recorded next. 0007, 0009, and 0010 remain open.
+**Status:** 0008 and 0011 are accepted. 0007 and 0012 are proposed. 0001-0006 are
+effectively settled by the architecture document and should be recorded next.
+0009 and 0010 remain open.
 
