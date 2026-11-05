@@ -128,7 +128,7 @@ defmodule AsnEventBroker.Delivery do
   # already observed them. An idle sweep therefore runs one statement and
   # takes no lock.
   defp claim_loop(name, max, deadline) do
-    Waiters.join()
+    Waiters.join(name)
     flush_wakes()
 
     outcome =
@@ -151,7 +151,7 @@ defmodule AsnEventBroker.Delivery do
     case outcome do
       {:ok, []} ->
         if remaining_ms(deadline) <= 0 do
-          Waiters.leave()
+          Waiters.leave(name)
           {:ok, []}
         else
           receive do
@@ -160,12 +160,12 @@ defmodule AsnEventBroker.Delivery do
             min(remaining_ms(deadline), delivery_cfg(:sweep_interval_ms)) -> :ok
           end
 
-          Waiters.leave()
+          Waiters.leave(name)
           claim_loop(name, max, deadline)
         end
 
       result ->
-        Waiters.leave()
+        Waiters.leave(name)
         result
     end
   end

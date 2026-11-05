@@ -43,11 +43,12 @@ defmodule AsnEventBroker.Publishing do
         end)
 
       case outcome do
-        {:ok, {:created, created}} ->
+        {:ok, {:created, subscriptions}} ->
           # Wake parked claims only after the fan-out transaction committed,
-          # and only when deliveries actually exist: an empty fan-out has
-          # nothing to wake for.
-          if created > 0, do: Waiters.wake_all()
+          # and only for the subscriptions that received a delivery: waking
+          # every parked claim makes unrelated consumers run a claim check for
+          # a publish they cannot consume.
+          if subscriptions != [], do: Waiters.wake(subscriptions)
 
           Telemetry.emit_count([:publish, :accepted], %{type: envelope.type, outcome: :created})
           {:ok, :created}
@@ -116,18 +117,17 @@ defmodule AsnEventBroker.Publishing do
   end
 
   defp fan_out(event, now) do
-    rows =
-      event.type
-      |> Routing.eligible_subscriptions()
-      |> Enum.map(&delivery_row(event, &1, now))
+    subscriptions = Routing.eligible_subscriptions(event.type)
+
+    rows = Enum.map(subscriptions, &delivery_row(event, &1, now))
 
     case rows do
       [] ->
-        0
+        []
 
       rows ->
-        {count, _} = Repo.insert_all(Delivery, rows)
-        count
+        {_count, _} = Repo.insert_all(Delivery, rows)
+        Enum.map(subscriptions, & &1.name)
     end
   end
 
