@@ -2,6 +2,7 @@ defmodule AsnEventBroker.DeliveryTest do
   use AsnEventBroker.DataCase, async: true
 
   alias AsnEventBroker.{Acknowledgements, Delivery, Publishing, Repo}
+  alias AsnEventBroker.Delivery.Waiters
   alias AsnEventBroker.Subscriptions.Subscription
   alias AsnEventBroker.Workers.LeaseReaper
 
@@ -420,6 +421,78 @@ defmodule AsnEventBroker.DeliveryTest do
     assert {:ok, :created} = Publishing.publish(attrs, "social-api")
     assert {:ok, [_]} = Task.await(task)
     assert System.monotonic_time(:millisecond) - started < 400
+  end
+
+  test "wake/1 messages only waiters registered for the named subscription" do
+    parent = self()
+    suffix = System.unique_integer([:positive])
+    interested = "wake-a-#{suffix}"
+    other = "wake-b-#{suffix}"
+
+    waiters =
+      for name <- [interested, other] do
+        spawn(fn ->
+          Waiters.join(name)
+          send(parent, {:joined, name})
+
+          receive do
+            :wake -> send(parent, {:woke, name})
+            :stop -> Waiters.leave(name)
+          end
+        end)
+      end
+
+    on_exit(fn -> Enum.each(waiters, &send(&1, :stop)) end)
+
+    assert_receive {:joined, ^interested}
+    assert_receive {:joined, ^other}
+
+    Waiters.wake([interested])
+
+    assert_receive {:woke, ^interested}, 200
+    refute_receive {:woke, ^other}, 100
+
+    Enum.each(waiters, &send(&1, :stop))
+  end
+
+  test "publishing wakes only the subscriptions that received deliveries" do
+    insert_subscription("wake-scoped-target", event_types: ["wake.event"])
+    insert_subscription("wake-scoped-other", event_types: ["other.event"])
+
+    parent = self()
+
+    waiters =
+      for name <- ["wake-scoped-target", "wake-scoped-other"] do
+        spawn(fn ->
+          Waiters.join(name)
+          send(parent, {:joined, name})
+
+          receive do
+            :wake -> send(parent, {:woke, name})
+            :stop -> Waiters.leave(name)
+          end
+        end)
+      end
+
+    on_exit(fn -> Enum.each(waiters, &send(&1, :stop)) end)
+
+    assert_receive {:joined, "wake-scoped-target"}
+    assert_receive {:joined, "wake-scoped-other"}
+
+    attrs = %{
+      "event_id" => Ecto.UUID.generate(),
+      "type" => "wake.event",
+      "schema_version" => 1,
+      "occurred_at" => "2026-10-25T10:00:00Z",
+      "payload" => %{}
+    }
+
+    assert {:ok, :created} = Publishing.publish(attrs, "social-api")
+
+    assert_receive {:woke, "wake-scoped-target"}, 200
+    refute_receive {:woke, "wake-scoped-other"}, 100
+
+    Enum.each(waiters, &send(&1, :stop))
   end
 
   test "publishing with no eligible subscriptions does not wait for waiters" do

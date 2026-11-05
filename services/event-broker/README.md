@@ -365,6 +365,11 @@ the wakeup registry before the check, so a publish that commits after the check
 leaves a `:wake` in the mailbox. Wakes that arrived before the check are
 flushed because the check already observed them.
 
+Wakeups are scoped: a publish wakes only the claims parked for subscriptions
+that received a delivery in its fan-out. An unrelated parked claim stays
+asleep until its next sweep, so one publish does not make every consumer run a
+claim check.
+
 At 50 parked consumers with `pool_size: 10`, this took the broker from ~7.3 to
 ~1.1 statements/s per consumer and removed the connection errors recorded in
 the 2026-10-28 baseline; see
