@@ -4,6 +4,7 @@
 Checks:
 
 - every OpenAPI document under ``contracts/openapi/`` is valid OpenAPI 3.1;
+- no YAML contract repeats a mapping key (YAML would silently keep the last one);
 - every external ``$ref`` resolves to an existing file and JSON Pointer;
 - the broker ``EventEnvelope`` component matches the shared envelope schema;
 - every ``*.schema.json`` under ``contracts/events/`` is a valid JSON Schema;
@@ -43,9 +44,43 @@ def relative(path: Path) -> str:
     return path.relative_to(ROOT).as_posix()
 
 
+class DuplicateKeyError(ValueError):
+    """Raised when a YAML mapping repeats a key."""
+
+
+class StrictLoader(yaml.SafeLoader):
+    """Safe loader that rejects duplicate mapping keys.
+
+    YAML keeps the last duplicate key silently, so a repeated response status
+    hides the earlier one and the rendered documentation shows the wrong text.
+    """
+
+
+def _construct_mapping(
+    loader: StrictLoader, node: yaml.MappingNode, deep: bool = False
+):
+    mapping = {}
+    for key_node, value_node in node.value:
+        key = loader.construct_object(key_node, deep=deep)
+        if key in mapping:
+            line = key_node.start_mark.line + 1
+            raise DuplicateKeyError(f"duplicate key {key!r} at line {line}")
+        mapping[key] = loader.construct_object(value_node, deep=deep)
+    return mapping
+
+
+StrictLoader.add_constructor(
+    yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, _construct_mapping
+)
+
+
+def load_yaml_text(text: str):
+    return yaml.load(text, Loader=StrictLoader)
+
+
 def load_yaml(path: Path):
     with path.open(encoding="utf-8") as handle:
-        return yaml.safe_load(handle)
+        return yaml.load(handle, Loader=StrictLoader)
 
 
 def load_contract(path: Path):
@@ -314,9 +349,9 @@ def check_version_bump(base_ref: str) -> list[str]:
             continue
 
         try:
-            base_spec = yaml.safe_load(base_text)
+            base_spec = load_yaml_text(base_text)
             current_spec = load_yaml(path)
-        except yaml.YAMLError as exc:
+        except (yaml.YAMLError, DuplicateKeyError) as exc:
             errors.append(f"{label}: cannot compare the base version: {exc}")
             continue
 
