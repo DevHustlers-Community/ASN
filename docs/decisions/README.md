@@ -38,6 +38,7 @@ Every significant, hard-to-reverse decision gets one numbered ADR.
 | [0008](0008-broker-transport-and-delivery-contract.md) | Broker transport and delivery contract | accepted |
 | [0011](0011-elixir-and-postgres-baseline.md) | Elixir and PostgreSQL baseline | accepted |
 | [0012](0012-frontend-design-system-and-theming.md) | Frontend design system and theming | proposed |
+| [0014](0014-community-commit-authorization.md) | Community commit authorization and post-block removal | proposed |
 
 **Planned ADRs:**
 
@@ -52,7 +53,8 @@ Every significant, hard-to-reverse decision gets one numbered ADR.
 | 0009 | Opaque envelope contract from day one |
 | 0010 | Web E2EE parity policy |
 
-**Status:** 0007, 0008 and 0011 are accepted. 0012 is proposed. 0001-0006 are
+**Status:** 0007, 0008 and 0011 are accepted. 0012 and 0014 are proposed.
+0001-0006 are
 effectively settled by the architecture document and should be recorded next.
 0009 and 0010 remain open.
 

@@ -412,7 +412,7 @@ Checks: `kind IN ('direct','community')`; direct rows require `direct_key`; comm
 
 Indexes: `(last_message_at DESC, id DESC)` and any inbox-specific indexes justified by actual queries.
 
-**Crypto rule:** when a member is removed/banned from an E2EE group, clients rotate the group sending state according to the chosen protocol before sending future content. The server increments `crypto_state_version` and distributes the membership change. This cannot revoke knowledge of already-decrypted messages. By default, new members do not receive pre-join history unless a deliberate encrypted history-sharing design is implemented.
+**Crypto rule:** when a member is removed/banned from an E2EE group, clients rotate the group sending state according to the chosen protocol before sending future content. The server increments `crypto_state_version` and distributes the membership change. This cannot revoke knowledge of already-decrypted messages. By default, new members do not receive pre-join history unless a deliberate encrypted history-sharing design is implemented. Who may author a membership-changing Commit, who triggers the Remove Commit after a block or ban, and the entry points the block/ban policy must cover are decided in [ADR 0014](../decisions/0014-community-commit-authorization.md).
 
 ### 3.6 `conversation_members`
 
@@ -967,7 +967,7 @@ These do not block schema work, but must be finalized before protocol implementa
 6. **E2EE protocol and supported libraries:** compare maintained implementations for React Native (Android/iOS) and React web; evaluate licensing, update cadence, test vectors, multi-device behavior, group chat behavior, and post-quantum roadmap. No custom protocol.
 7. **Web E2EE parity:** whether web ships E2EE at the same time as mobile, or with a documented limitation. No silent plaintext fallback.
 8. **Device identity verification:** how users see/verify identity-key changes and how revocation propagates.
-9. **Group key rotation:** how member removal/ban rotates group sending keys, how new members are added, and whether pre-join history is delivered. Default in this draft: no pre-join history.
+9. **Group key rotation:** how member removal/ban rotates group sending keys, how new members are added, and whether pre-join history is delivered. Default in this draft: no pre-join history. The who-triggers-the-Remove-Commit and block/ban enforcement-surface parts are settled in [ADR 0014](../decisions/0014-community-commit-authorization.md) (proposed); pre-join history and how new members receive keys remain open.
 10. **Backup recovery method:** recovery key, passphrase, passkey-based key wrapping, or a reviewed combination. Test lost phone, lost recovery secret, corrupted backup, old backup format, account takeover, and key rotation.
 11. **React Native SQLite stack:** `expo-sqlite` vs `op-sqlite`, SQLCipher support and key handling, `VACUUM INTO` behavior on both platforms, and exclusion from platform cloud backups.
 12. **Drive location and authorization:** a visible ASN-named encrypted backup file if user-manageable files are required; start with `drive.file` and resumable upload. Do not request broad Drive scope without a clear requirement.
