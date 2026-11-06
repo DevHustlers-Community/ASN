@@ -21,9 +21,10 @@ One OpenAPI 3.x file per REST service.
 - Response types are generated into [`packages/api-client`](../../packages/api-client/README.md).
 
 **CI:** [`scripts/contracts/validate.py`](../../scripts/contracts/validate.py)
-validates every file with `openapi-spec-validator`, resolves every `$ref`, and
-rejects a removed path, operation, or required field without an `info.version`
-bump on pull requests. Client generation drift checks are not implemented yet.
+validates every file with `openapi-spec-validator`, resolves every `$ref`, rejects
+a repeated YAML mapping key, and rejects a removed path, operation, or required
+field without an `info.version` bump on pull requests. Client generation drift
+checks are not implemented yet.
 
 **Status:** not written yet for the business services; authoring starts with
 the Social API and Chat endpoints needed by the first vertical slice. The
@@ -38,3 +39,26 @@ provisional pending §9.1: the `chatBearer` scheme name and the 401/403
 semantics are stable, the credential format is not. The shared error
 envelope question remains open in §9.1; both landed contracts use RFC 9457
 Problem Details with a stable `code` extension until that decision.
+
+## Chat slice 1 coverage
+
+The schema admits states that no operation can reach yet. They are intentional
+gaps of the first slice, not implemented behaviour: do not build UI or tests that
+assume they are reachable.
+
+| State in the contract/schema | Missing operation |
+|---|---|
+| `MessageView.deleted_at` with `payload` absent | delete/tombstone message |
+| `MessageView.edited_at` | edit message (new `revision_no`) |
+| `conversations.kind = community` | create community conversation |
+| `conversation_members.role = admin` | change member role |
+| `conversation_members.left_at` | add, remove, or leave a member |
+| `conversation_members.muted_until` | mute/unmute a conversation |
+| `chat_devices.status = pending_verification` | transition device verification state |
+| `chat_devices.device_label` | rename a device |
+| Delivery and read receipts | receipt endpoints |
+| `device_prekeys` table | not created in this slice; waits for the E2EE library gate |
+
+`processed_events` and `message_payloads` are internal: they are written by the
+service inside the send transaction and deliberately have no endpoint of their
+own. `chat_users` is a projection, so profile fields come from the Social API.

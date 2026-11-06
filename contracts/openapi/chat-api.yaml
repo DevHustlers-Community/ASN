@@ -477,13 +477,6 @@ paths:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
         '400': { $ref: '#/components/responses/BadRequest' }
-        '422':
-          description: >
-            A cursor that cannot be parsed or was issued for another resource
-            (`code: unprocessable`).
-          content:
-            application/problem+json:
-              schema: { $ref: '#/components/schemas/Problem' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '429': { $ref: '#/components/responses/RateLimited' }
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
