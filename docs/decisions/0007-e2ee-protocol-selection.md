@@ -1,6 +1,6 @@
 # 0007 - E2EE protocol selection: MLS (RFC 9420)
 
-- Status: proposed
+- Status: accepted
 - Date: 2026-11-05
 - Supersedes: -
 
