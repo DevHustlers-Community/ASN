@@ -74,10 +74,6 @@ StrictLoader.add_constructor(
 )
 
 
-def load_yaml_text(text: str):
-    return yaml.load(text, Loader=StrictLoader)
-
-
 def load_yaml(path: Path):
     with path.open(encoding="utf-8") as handle:
         return yaml.load(handle, Loader=StrictLoader)
@@ -349,10 +345,18 @@ def check_version_bump(base_ref: str) -> list[str]:
             continue
 
         try:
-            base_spec = load_yaml_text(base_text)
-            current_spec = load_yaml(path)
-        except (yaml.YAMLError, DuplicateKeyError) as exc:
+            # The base revision is history: it may contain a duplicate key that
+            # an earlier PR merged. Compare against what that revision actually
+            # rendered instead of failing every later PR that touches the file.
+            base_spec = yaml.safe_load(base_text)
+        except yaml.YAMLError as exc:
             errors.append(f"{label}: cannot compare the base version: {exc}")
+            continue
+
+        try:
+            current_spec = load_yaml(path)
+        except (yaml.YAMLError, DuplicateKeyError):
+            # validate_openapi already reported this file.
             continue
 
         base_version = (base_spec.get("info") or {}).get("version")
