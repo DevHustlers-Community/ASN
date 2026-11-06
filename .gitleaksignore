@@ -1,0 +1,9 @@
+# gitleaks fingerprints of reviewed false positives, one per line.
+#
+# A client-derived verification fingerprint in a contract example is public
+# metadata, not a credential. Commit ee5cf70 introduced the example value
+# "FP-1A2B-3C4D-5E6F"; its entropy tripped generic-api-key. The value itself was
+# replaced with "placeholder" in 2026-11-06-chat-device-fingerprint-fixture, but
+# a full-history scan on main still reports the old commit, so the fingerprint
+# stays ignored here. Do not add an entry without reviewing the exact finding.
+ee5cf707f216698eabb3be23fd04e1d96997ae24:contracts/events/examples/valid-chat-device-registered.json:generic-api-key:14

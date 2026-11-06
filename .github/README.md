@@ -42,6 +42,9 @@
 **Rules:**
 
 - Workflows never print secrets or full evidence payloads.
+- A reviewed `gitleaks` false positive is ignored by exact fingerprint in
+  [`.gitleaksignore`](../.gitleaksignore), with the reason written next to it.
+  Do not exclude a whole file or disable a rule to silence one finding.
 - Every workflow declares `permissions: contents: read`, a per-workflow
   concurrency group that cancels superseded runs, and a job timeout.
 - Database-backed jobs use disposable PostgreSQL instances, one per service.
