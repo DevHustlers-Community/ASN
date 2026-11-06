@@ -1,0 +1,17 @@
+{
+  "event_id": "0190f1e2-c003-7d5e-8f60-7a8b9c0d1e24",
+  "type": "chat.conversation.created",
+  "schema_version": 1,
+  "occurred_at": "2026-11-06T12:05:00Z",
+  "trace_id": "4bf92f3577b34da6a3ce929d0e0e5f37",
+  "payload": {
+    "conversation_id": "0190f1e2-a1b2-7c3d-8e4f-5a6b7c8d9e01",
+    "kind": "direct",
+    "member_user_ids": [
+      "0190f1e2-6d7e-7f80-b192-3d4e5f607182",
+      "0190f1e2-6d7e-7f80-b192-3d4e5f607183"
+    ],
+    "crypto_protocol": "dev-opaque-v1",
+    "crypto_protocol_version": 1
+  }
+}

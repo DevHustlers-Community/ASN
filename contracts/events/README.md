@@ -35,8 +35,21 @@ events/
 
 **Status:** the envelope schema and its valid/invalid examples have landed
 ([`common/event-envelope.schema.json`](common/event-envelope.schema.json),
-[`examples/`](examples/README.md)). Per-event payload schemas land before their
-producers are implemented.
+[`examples/`](examples/README.md)), and the first Chat v1 payload schemas have
+landed under [`chat/`](chat/) (`chat.device.registered`,
+`chat.device.revoked`, `chat.conversation.created`, `chat.message.created`).
+Per-event payload schemas land before their producers are implemented.
+
+**Payload file naming:** payload schemas use the event type as the file name
+with the schema version as a suffix, `<type>.v1.schema.json`. A breaking
+payload change requires a new event `type` with a `.v2` suffix per
+[`contracts/VERSIONING.md`](../VERSIONING.md) (a new file named
+`<event>.v2.schema.json`, dual-published with the old type for the deprecation
+window); it is not a swap of the file under the existing type. The payload
+schemas are not yet
+machine-bound to the envelope `type`: the validator proves every payload schema
+is a valid JSON Schema but does not yet check that a fixture or an event of a
+given `type` validates against the matching payload schema.
 
 ## Transport notes ([ADR 0008](../../docs/decisions/0008-broker-transport-and-delivery-contract.md))
 

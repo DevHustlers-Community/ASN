@@ -1,0 +1,963 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>ASN Chat Contract Slice One — Reference Document</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<style>
+  :root {
+    --ink: #0f172a;
+    --muted: #475569;
+    --faint: #64748b;
+    --accent: #1d4ed8;
+    --accent-soft: #eff6ff;
+    --teal: #0f766e;
+    --teal-soft: #f0fdfa;
+    --amber: #b45309;
+    --amber-soft: #fffbeb;
+    --rose: #be123c;
+    --rose-soft: #fff1f2;
+    --line: #e2e8f0;
+    --bg: #f8fafc;
+    --code-bg: #0f172a;
+  }
+
+  * { box-sizing: border-box; }
+
+  @page {
+    size: A4;
+    margin: 16mm 14mm 20mm 14mm;
+  }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    color: var(--ink);
+    font-family: "DejaVu Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+    font-size: 9.6pt;
+    line-height: 1.5;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .running-footer {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    padding: 5px 14mm 6px;
+    font-size: 7pt;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--faint);
+    border-top: 1px solid var(--line);
+    background: #ffffff;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .page-break { break-after: page; }
+  h1, h2, h3, h4 { break-after: avoid; }
+  table, figure, .card, .callout { break-inside: avoid; }
+  tr { break-inside: avoid; }
+
+  /* ---------- Cover ---------- */
+  .cover {
+    height: 235mm;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding-bottom: 8mm;
+  }
+  .cover-top .eyebrow {
+    display: inline-block;
+    font-size: 8.5pt;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    border-radius: 999px;
+    padding: 3px 12px;
+    margin-bottom: 26px;
+  }
+  .cover h1 {
+    font-size: 34pt;
+    line-height: 1.12;
+    margin: 0 0 10px;
+    letter-spacing: -0.02em;
+  }
+  .cover h2 {
+    font-size: 14pt;
+    font-weight: 500;
+    color: var(--muted);
+    margin: 0 0 4px;
+  }
+  .rule { height: 4px; width: 96px; background: var(--accent); margin: 26px 0; border-radius: 2px; }
+  .cover-meta {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin-top: 26px;
+  }
+  .cover-meta .cell {
+    border-top: 2px solid var(--ink);
+    padding-top: 8px;
+  }
+  .cover-meta .k { font-size: 7.5pt; text-transform: uppercase; letter-spacing: 0.1em; color: var(--faint); }
+  .cover-meta .v { font-size: 11pt; font-weight: 600; margin-top: 3px; }
+  .cover-note {
+    background: var(--bg);
+    border-left: 3px solid var(--accent);
+    padding: 12px 14px;
+    font-size: 9pt;
+    color: var(--muted);
+  }
+
+  /* ---------- Structure ---------- */
+  .section { margin-bottom: 20px; }
+  .section-head {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    border-bottom: 2px solid var(--ink);
+    padding-bottom: 6px;
+    margin-bottom: 14px;
+  }
+  .section-head .num {
+    font-size: 20pt;
+    font-weight: 800;
+    color: var(--accent);
+    line-height: 1;
+  }
+  .section-head h3 { font-size: 15pt; margin: 0; letter-spacing: -0.01em; }
+
+  h4 {
+    font-size: 10.5pt;
+    margin: 16px 0 6px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  p { margin: 6px 0; }
+  .lead { font-size: 10.5pt; color: var(--muted); }
+
+  code {
+    font-family: "DejaVu Sans Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+    font-size: 8.6pt;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 0 4px;
+    color: #0b2545;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 8.6pt;
+    margin: 8px 0 4px;
+  }
+  thead th {
+    background: var(--ink);
+    color: #ffffff;
+    text-align: left;
+    padding: 7px 8px;
+    font-weight: 600;
+    font-size: 8pt;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  tbody td {
+    border-bottom: 1px solid var(--line);
+    padding: 6px 8px;
+    vertical-align: top;
+  }
+  tbody tr:nth-child(even) td { background: var(--bg); }
+  td code { border: none; background: transparent; padding: 0; }
+
+  .tag {
+    display: inline-block;
+    font-size: 7.2pt;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border-radius: 999px;
+  }
+  .tag.in { background: var(--teal-soft); color: var(--teal); border: 1px solid #99f6e4; }
+  .tag.out { background: var(--rose-soft); color: var(--rose); border: 1px solid #fecdd3; }
+  .tag.warn { background: var(--amber-soft); color: var(--amber); border: 1px solid #fde68a; }
+  .tag.info { background: var(--accent-soft); color: var(--accent); border: 1px solid #bfdbfe; }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+
+  .card {
+    border: 1px solid var(--line);
+    border-top: 3px solid var(--accent);
+    background: #ffffff;
+    padding: 11px 13px;
+    border-radius: 4px;
+  }
+  .card.teal { border-top-color: var(--teal); }
+  .card.amber { border-top-color: var(--amber); }
+  .card h5 { margin: 0 0 5px; font-size: 10pt; }
+  .card p { margin: 3px 0; font-size: 8.8pt; color: var(--muted); }
+  .stat { font-size: 22pt; font-weight: 800; color: var(--ink); line-height: 1.1; }
+  .stat-label { font-size: 7.8pt; text-transform: uppercase; letter-spacing: 0.08em; color: var(--faint); }
+
+  .callout {
+    background: var(--accent-soft);
+    border-left: 3px solid var(--accent);
+    padding: 10px 13px;
+    margin: 10px 0;
+    font-size: 9pt;
+  }
+  .callout.warn { background: var(--amber-soft); border-left-color: var(--amber); }
+  .callout.risk { background: var(--rose-soft); border-left-color: var(--rose); }
+  .callout strong { display: block; margin-bottom: 3px; }
+
+  ul, ol { margin: 6px 0; padding-left: 18px; }
+  li { margin: 3px 0; }
+
+  figure { margin: 10px 0; text-align: center; }
+  figure .frame {
+    border: 1px solid var(--line);
+    background: var(--bg);
+    border-radius: 5px;
+    padding: 10px;
+    overflow: hidden;
+  }
+  figcaption {
+    font-size: 8pt;
+    color: var(--faint);
+    margin-top: 6px;
+    text-align: left;
+  }
+  .mermaid { display: flex; justify-content: center; }
+  .mermaid svg { max-width: 100% !important; height: auto !important; }
+
+  pre {
+    background: var(--code-bg);
+    color: #e2e8f0;
+    padding: 10px 12px;
+    border-radius: 5px;
+    font-family: "DejaVu Sans Mono", Menlo, Consolas, monospace;
+    font-size: 8pt;
+    line-height: 1.5;
+    overflow: hidden;
+    white-space: pre-wrap;
+    margin: 8px 0;
+  }
+  pre .cm { color: #7dd3fc; }
+  pre .st { color: #a5f3fc; }
+
+  .toc td { border-bottom: 1px dotted var(--line); padding: 5px 4px; font-size: 9.4pt; }
+  .toc td.n { width: 34px; color: var(--accent); font-weight: 700; }
+  .toc td.p { text-align: right; color: var(--faint); width: 70px; }
+
+  .ok { color: var(--teal); font-weight: 700; }
+</style>
+</head>
+<body>
+
+<div class="running-footer">
+  <span>ASN — Chat Contract Slice One</span>
+  <span>Protocol-neutral reference · Opaque envelopes only</span>
+</div>
+
+<!-- ============================ COVER ============================ -->
+<section class="cover">
+  <div class="cover-top">
+    <span class="eyebrow">Arabian Social Network · Reference Document</span>
+    <h1>Chat Contract Slice One</h1>
+    <h2>REST contract, event schemas, and the protocol-neutral <code>chat_db</code> model</h2>
+    <div class="rule"></div>
+    <p class="lead" style="max-width: 150mm;">
+      The first Chat slice defines <strong>what</strong> the service exposes and
+      <strong>how</strong> state is stored before any endpoint is implemented. It is
+      deliberately protocol-neutral: no MLS columns, no KeyPackage tables, no
+      plaintext. Development envelopes use <code>dev-opaque-v1</code>, which has the
+      same shape as production ciphertext.
+    </p>
+    <div class="cover-meta">
+      <div class="cell"><div class="k">OpenAPI operations</div><div class="v">10</div></div>
+      <div class="cell"><div class="k">Event payload schemas</div><div class="v">4</div></div>
+      <div class="cell"><div class="k">Migrations</div><div class="v">7</div></div>
+      <div class="cell"><div class="k">Tables created</div><div class="v">7</div></div>
+      <div class="cell"><div class="k">Contract version</div><div class="v">1.0.0</div></div>
+      <div class="cell"><div class="k">OpenAPI</div><div class="v">3.1.0</div></div>
+      <div class="cell"><div class="k">Database</div><div class="v">PostgreSQL 18.6</div></div>
+      <div class="cell"><div class="k">Branch</div><div class="v">feat/chat-contract-slice-one</div></div>
+    </div>
+  </div>
+
+  <div class="cover-note">
+    <strong>Contract-first order.</strong> Endpoints are not implemented in this
+    slice. The contract pins the surface — paths, status codes, idempotency,
+    pagination, error codes — so implementation, clients, and tests converge on one
+    shape. Source of truth stays in <code>contracts/openapi/chat-api.yaml</code>,
+    <code>contracts/events/chat/</code>, and
+    <code>docs/architecture/architecture-and-schema.md</code>; this document is a
+    read-only summary of those files.
+  </div>
+</section>
+
+<!-- ============================ TOC ============================ -->
+<section class="section page-break">
+  <div class="section-head"><span class="num">·</span><h3>Contents</h3></div>
+  <table class="toc">
+    <tbody>
+      <tr><td class="n">1</td><td>Executive summary and scope</td><td class="p">2</td></tr>
+      <tr><td class="n">2</td><td>REST API surface</td><td class="p">3</td></tr>
+      <tr><td class="n">3</td><td>Conventions: errors, idempotency, pagination, payloads</td><td class="p">4</td></tr>
+      <tr><td class="n">4</td><td>Event contracts and the envelope</td><td class="p">5</td></tr>
+      <tr><td class="n">5</td><td>Data model</td><td class="p">6</td></tr>
+      <tr><td class="n">6</td><td>Integrity rules and constraints</td><td class="p">8</td></tr>
+      <tr><td class="n">7</td><td>End-to-end workflows</td><td class="p">9</td></tr>
+      <tr><td class="n">8</td><td>Design decisions and rationale</td><td class="p">10</td></tr>
+      <tr><td class="n">9</td><td>Verification</td><td class="p">11</td></tr>
+      <tr><td class="n">10</td><td>Open risks and follow-ups</td><td class="p">12</td></tr>
+      <tr><td class="n">11</td><td>References</td><td class="p">13</td></tr>
+    </tbody>
+  </table>
+
+  <div class="section-head" style="margin-top: 24px;"><span class="num">1</span><h3>Executive summary and scope</h3></div>
+
+  <div class="grid-3">
+    <div class="card"><div class="stat">10</div><div class="stat-label">REST operations</div>
+      <p>Devices, conversations, membership, messages, and read cursor — every operation carries stable error codes.</p></div>
+    <div class="card teal"><div class="stat">0</div><div class="stat-label">Plaintext fields</div>
+      <p>No <code>body</code> column, DTO, event field, log line, or fixture carries decrypted content.</p></div>
+    <div class="card amber"><div class="stat">0</div><div class="stat-label">Protocol commitments</div>
+      <p>No <code>device_key_packages</code>, no <code>messages.crypto_epoch</code>, no MLS ciphersuite columns.</p></div>
+  </div>
+
+  <div class="grid-2" style="margin-top: 14px;">
+    <div class="card teal">
+      <h5>In this slice <span class="tag in">included</span></h5>
+      <ul>
+        <li>OpenAPI contract for the first vertical slice (send, read, resync).</li>
+        <li>Four chat event payload schemas plus envelope fixtures.</li>
+        <li>Seven neutral <code>chat_db</code> migrations with constraints verified against PostgreSQL 18.6.</li>
+        <li>Swagger UI viewer, READMEs, and architecture catalog rows.</li>
+      </ul>
+    </div>
+    <div class="card amber">
+      <h5>Deferred <span class="tag out">excluded</span></h5>
+      <ul>
+        <li>Controllers, contexts, routes, and channels — no endpoint is implemented yet.</li>
+        <li>Attachments, message receipts, reactions, edits, and deletions.</li>
+        <li>Prekeys, KeyPackages, control messages, and commit authorization (ADR 0014 is still <em>proposed</em>).</li>
+        <li>Friendship, privacy, and block projections — owned by a later Social-integration slice.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout">
+    <strong>Why contract first</strong>
+    The repository rule is explicit: API and event changes update <code>contracts/</code>
+    before code. Pinning the surface first keeps the design reviewable, keeps mobile
+    and web clients unblocked, and makes the later implementation diff a
+    verification of an agreed shape rather than a new proposal.
+  </div>
+</section>
+
+<!-- ============================ 2. API SURFACE ============================ -->
+<section class="section page-break">
+  <div class="section-head"><span class="num">2</span><h3>REST API surface</h3></div>
+  <p class="lead">Base path <code>/api/v1</code>, plural resources, bearer security
+  (provisional pending architecture §9.1). Every conversation-scoped read answers
+  <code>404</code> for a non-member so the existence of a conversation never leaks.</p>
+
+  <table>
+    <thead>
+      <tr><th>#</th><th>Operation</th><th>Path</th><th>Idempotency</th><th>Key responses</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>1</td><td><code>registerDevice</code></td><td><code>POST /devices</code></td>
+        <td>Same active fingerprint + identical key → <code>200</code>; same fingerprint + different key → <code>409 identity_key_conflict</code></td>
+        <td><code>201</code> <code>200</code> <code>409</code> <code>413</code> <code>422</code></td></tr>
+      <tr><td>2</td><td><code>listDevices</code></td><td><code>GET /devices</code></td>
+        <td>Read only; caller's own devices, bounded set</td><td><code>200</code></td></tr>
+      <tr><td>3</td><td><code>revokeDevice</code></td><td><code>POST /devices/{deviceId}/revoke</code></td>
+        <td>Repeat returns current state, never <code>409</code></td><td><code>200</code> <code>404</code></td></tr>
+      <tr><td>4</td><td><code>createConversation</code></td><td><code>POST /conversations</code></td>
+        <td>Deterministic <code>direct_key</code>; re-create → <code>200</code> with the existing conversation</td>
+        <td><code>201</code> <code>200</code> <code>403</code> <code>422</code></td></tr>
+      <tr><td>5</td><td><code>listConversations</code></td><td><code>GET /conversations</code></td>
+        <td>Cursor over <code>(last_message_at DESC NULLS LAST, id DESC)</code></td><td><code>200</code> <code>422</code></td></tr>
+      <tr><td>6</td><td><code>getConversation</code></td><td><code>GET /conversations/{conversationId}</code></td>
+        <td>Read only</td><td><code>200</code> <code>404</code></td></tr>
+      <tr><td>7</td><td><code>listConversationMembers</code></td><td><code>GET /conversations/{conversationId}/members</code></td>
+        <td>Active members only; cursor paged</td><td><code>200</code> <code>404</code> <code>422</code></td></tr>
+      <tr><td>8</td><td><code>sendMessage</code></td><td><code>POST /conversations/{conversationId}/messages</code></td>
+        <td><code>client_message_id</code>: identical decoded body → <code>200</code>; any difference → <code>409 duplicate_client_message_id</code></td>
+        <td><code>201</code> <code>200</code> <code>409</code> <code>404</code> <code>413</code> <code>422</code></td></tr>
+      <tr><td>9</td><td><code>listMessages</code></td><td><code>GET /conversations/{conversationId}/messages</code></td>
+        <td>Exactly one of <code>cursor</code>, <code>after_seq</code>, <code>before_seq</code></td>
+        <td><code>200</code> <code>400</code> <code>404</code> <code>422</code></td></tr>
+      <tr><td>10</td><td><code>updateReadCursor</code></td><td><code>POST /conversations/{conversationId}/read-cursor</code></td>
+        <td>Forward-only: a lower value is a no-op that echoes the stored value</td><td><code>200</code> <code>404</code> <code>422</code></td></tr>
+    </tbody>
+  </table>
+
+  <h4>Core response schemas</h4>
+  <div class="grid-2">
+    <div class="card">
+      <h5><code>ConversationView</code></h5>
+      <p><code>conversation_id</code>, <code>kind</code>, <code>title?</code>,
+      <code>community_id?</code>, <code>channel_id?</code>, <code>last_seq</code>,
+      <code>last_message_at?</code>, <code>crypto_protocol</code>,
+      <code>crypto_protocol_version</code>, <code>created_at</code>, and a required
+      <strong><code>viewer</code></strong> object: <code>role</code>,
+      <code>last_read_seq</code>, <code>joined_at</code>, <code>muted_until?</code>,
+      <code>membership_version</code>.</p>
+    </div>
+    <div class="card">
+      <h5><code>MessageView</code></h5>
+      <p><code>message_id</code>, <code>conversation_id</code>, <code>seq</code>,
+      <code>sender_id</code>, <code>sender_device_id</code>,
+      <code>client_message_id</code>, <code>payload_kind</code>,
+      <code>payload_mode</code>, <code>reply_to_id?</code>, <code>revision_no</code>,
+      <code>payload?</code> (latest revision; absent only when
+      <code>deleted_at</code> is set), <code>edited_at?</code>, <code>deleted_at?</code>,
+      <code>created_at</code>, <code>updated_at</code>.</p>
+    </div>
+    <div class="card">
+      <h5><code>DeviceView</code></h5>
+      <p><code>device_id</code>, <code>platform</code>, <code>device_label?</code>,
+      <code>identity_key_public</code> (base64), <code>identity_key_fingerprint</code>,
+      <code>status</code>, <code>created_at</code>, <code>last_seen_at?</code>,
+      <code>revoked_at?</code>. The public key is returned over REST for
+      verification and never appears in an event.</p>
+    </div>
+    <div class="card">
+      <h5><code>MemberView</code></h5>
+      <p><code>user_id</code>, <code>role</code>, <code>joined_at</code>,
+      <code>membership_version</code>. Another member's <code>last_read_seq</code> is
+      never exposed: read state is private to its owner.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ 3. CONVENTIONS ============================ -->
+<section class="section page-break">
+  <div class="section-head"><span class="num">3</span><h3>Conventions: errors, idempotency, pagination, payloads</h3></div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h5>Error model — RFC 9457 Problem Details</h5>
+      <p>Content type <code>application/problem+json</code> with
+      <code>type</code>, <code>title</code>, <code>status</code>, <code>detail?</code>,
+      a stable <code>code</code>, and <code>request_id</code> for correlation.</p>
+      <p style="margin-top:6px;"><strong>Stable codes:</strong>
+      <code>unauthorized</code>, <code>forbidden</code>,
+      <code>forbidden_direct_chat_not_permitted</code>, <code>not_found</code>,
+      <code>conflict</code>, <code>invalid_request</code>, <code>unprocessable</code>,
+      <code>payload_too_large</code>, <code>rate_limited</code>,
+      <code>identity_key_conflict</code>, <code>duplicate_client_message_id</code>,
+      <code>service_unavailable</code>.</p>
+    </div>
+    <div class="card">
+      <h5>Opaque payload encoding</h5>
+      <pre>OpaquePayload:
+  required: [payload_encoding, ciphertext]
+  payload_encoding: { enum: [base64] }
+  ciphertext:       { type: string, format: byte }</pre>
+      <p>Base64 is the only v1 value and is never inferred: an absent
+      <code>payload_encoding</code> is a validation error, not a default. The server
+      decodes to <code>bytea</code> and stores ciphertext only. Request bodies are
+      capped at <strong>256 KiB</strong>, the same figure the broker enforces, so one
+      limit governs the platform.</p>
+    </div>
+  </div>
+
+  <h4>Idempotency rules</h4>
+  <table>
+    <thead><tr><th>Operation</th><th>Key</th><th>Same key, same content</th><th>Same key, different content</th></tr></thead>
+    <tbody>
+      <tr><td><code>sendMessage</code></td><td><code>client_message_id</code> (unique per sender in <code>messages</code>)</td>
+        <td><code>200</code> + original <code>MessageView</code></td><td><code>409 duplicate_client_message_id</code></td></tr>
+      <tr><td><code>registerDevice</code></td><td><code>(user_id, identity_key_fingerprint)</code> while active</td>
+        <td><code>200</code> + existing device</td><td><code>409 identity_key_conflict</code></td></tr>
+      <tr><td><code>createConversation</code></td><td>Deterministic <code>direct_key</code> over the sorted pair</td>
+        <td><code>200</code> + existing conversation</td><td>n/a (a direct key has one shape)</td></tr>
+      <tr><td><code>revokeDevice</code></td><td>Device state</td>
+        <td><code>200</code> + current state</td><td>n/a</td></tr>
+      <tr><td><code>updateReadCursor</code></td><td>Forward-only monotonic cursor</td>
+        <td>Lower value → no-op <code>200</code> echoing stored value</td><td>&gt; <code>last_seq</code> → <code>422</code></td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout warn">
+    <strong>Comparison is on decoded values</strong>
+    A retry that reorders JSON keys is the <em>same</em> request. Duplicate detection
+    compares <code>reply_to_id</code> and the decoded <code>payload</code> bytes
+    within the same conversation — never raw request bytes. This is documented in the
+    contract so an implementation cannot invent its own interpretation.
+  </div>
+
+  <h4>Pagination</h4>
+  <ul>
+    <li>Opaque <code>cursor</code> tokens (base64url) are issued per resource and bound to their path; a foreign token answers <code>422</code>.</li>
+    <li><code>listMessages</code> accepts exactly one of <code>cursor</code>, <code>after_seq</code> (reconnect recovery), or <code>before_seq</code>; more than one answers <code>400</code>.</li>
+    <li>Limits: messages 1–200 (default 50), inbox 1–100 (default 20), members 1–200 (default 50). Offset pagination is not supported anywhere.</li>
+    <li>Message ordering is <code>seq</code> ascending; inbox ordering is <code>(last_message_at DESC NULLS LAST, id DESC)</code>. <code>last_message_at</code> is inbox metadata, never a sync cursor.</li>
+  </ul>
+</section>
+
+<!-- ============================ 4. EVENTS ============================ -->
+<section class="section page-break">
+  <div class="section-head"><span class="num">4</span><h3>Event contracts and the envelope</h3></div>
+
+  <p class="lead">Payload schemas live in <code>contracts/events/chat/</code>. Each
+  file is a JSON Schema draft 2020-12 that constrains the <code>payload</code> object;
+  the shared envelope in <code>contracts/events/common/</code> constrains everything
+  else and enforces all-or-none aggregate fields.</p>
+
+  <table>
+    <thead><tr><th>Event type</th><th>Payload fields</th><th>Envelope contract</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><code>chat.device.registered</code></td>
+        <td><code>device_id</code>, <code>user_id</code>, <code>platform</code>, <code>identity_key_fingerprint</code></td>
+        <td><code>aggregate_type=device</code>, <code>aggregate_id=device_id</code>, <code>aggregate_version=1</code></td>
+      </tr>
+      <tr>
+        <td><code>chat.device.revoked</code></td>
+        <td><code>device_id</code>, <code>user_id</code></td>
+        <td><code>aggregate_type=device</code>, <code>aggregate_id=device_id</code>, <code>aggregate_version=2</code></td>
+      </tr>
+      <tr>
+        <td><code>chat.conversation.created</code></td>
+        <td><code>conversation_id</code>, <code>kind=direct</code>, <code>member_user_ids[2]</code>, <code>crypto_protocol</code>, <code>crypto_protocol_version</code></td>
+        <td>No aggregate fields — creation is a one-shot fact, not a versioned mutation</td>
+      </tr>
+      <tr>
+        <td><code>chat.message.created</code></td>
+        <td><code>conversation_id</code>, <code>message_id</code>, <code>seq</code>, <code>sender_id</code>, <code>sender_device_id</code>, <code>payload_kind</code>, <code>payload_mode</code>, <code>reply_to_id</code></td>
+        <td><code>aggregate_type=message</code>, <code>aggregate_id=message_id</code>, <code>aggregate_version=1</code></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="grid-2">
+    <div class="card">
+      <h5>Never in an event</h5>
+      <ul>
+        <li>Ciphertext or any payload bytes — recipients resync over REST.</li>
+        <li>Raw public key material — REST-only, in <code>DeviceView</code>.</li>
+        <li><code>device_label</code> — untrusted user text with no consumer.</li>
+        <li>Read cursors — private to their owner.</li>
+      </ul>
+    </div>
+    <div class="card amber">
+      <h5>Aggregate choice for messages</h5>
+      <p>Messages use <code>aggregate_type=message</code> rather than
+      <code>conversation</code> + <code>seq</code>. Overloading the conversation
+      version space would collide with every future conversation-scoped event, and
+      <code>crypto_state_version</code> is an epoch counter, not a general event
+      counter. Per-conversation order is carried by <code>seq</code> inside the
+      payload; broker ordering is never used as a conversation feed.</p>
+    </div>
+  </div>
+
+  <h4>Delivery semantics</h4>
+  <ol>
+    <li>Business change and <code>outbox_events</code> row are written in one local transaction.</li>
+    <li>The relay publishes after commit, reusing a stable <code>event_id</code>; the broker answers <code>200</code> for an identical duplicate and <code>409</code> for the same <code>event_id</code> with different content.</li>
+    <li>Delivery is at-least-once. Consumers deduplicate on <code>event_id</code> into <code>processed_events</code> and reject stale <code>aggregate_version</code> values atomically with their business effect.</li>
+    <li>There is no global ordering guarantee — only per-aggregate ordering.</li>
+  </ol>
+
+  <div class="callout">
+    <strong>Catalog discipline</strong>
+    <code>chat.conversation.created</code> and <code>chat.message.created</code> were
+    added to the architecture's event catalog (§7) in the same change, so the catalog
+    and the payload schemas land atomically. Every event a service emits must be
+    cataloged before its producer exists.
+  </div>
+</section>
+
+<!-- ============================ 5. DATA MODEL ============================ -->
+<section class="section page-break">
+  <div class="section-head"><span class="num">5</span><h3>Data model</h3></div>
+
+  <figure>
+    <div class="frame">
+      <div class="mermaid">
+erDiagram
+    chat_users ||--o{ chat_devices : "owns"
+    chat_users ||--o{ conversation_members : "joins"
+    conversations ||--o{ conversation_members : "has"
+    conversations ||--o{ messages : "contains"
+    chat_users ||--o{ messages : "sends"
+    chat_devices ||--o{ messages : "produced by"
+    messages ||--o{ message_payloads : "carries"
+    chat_devices ||--o{ message_payloads : "targets when per-device"
+    messages ||--o{ messages : "reply_to"
+      </div>
+    </div>
+    <figcaption>Figure 1 — <code>chat_db</code> entity relationships. All foreign keys stay inside
+    <code>chat_db</code>; IDs that reference Social data (<code>community_id</code>,
+    <code>channel_id</code>) are soft references, never foreign keys.</figcaption>
+  </figure>
+
+  <table>
+    <thead><tr><th>Table</th><th>Purpose</th><th>Key constraints</th></tr></thead>
+    <tbody>
+      <tr><td><code>chat_users</code></td><td>Read-only projection of <code>social_db.users</code></td>
+        <td>Same UUID as Social; no unique on <code>username</code> — Social is the source of truth</td></tr>
+      <tr><td><code>chat_devices</code></td><td>One cryptographic identity per installed client</td>
+        <td>Partial unique <code>(user_id, identity_key_fingerprint) WHERE status='active'</code>; unique <code>(id, user_id)</code> backing a composite FK</td></tr>
+      <tr><td><code>conversations</code></td><td>Direct or community conversation and its ordering head</td>
+        <td><code>direct_key</code> unique; <code>channel_id</code> unique; kind-guarded shape CHECKs; <code>last_seq</code> default 0</td></tr>
+      <tr><td><code>conversation_members</code></td><td>Membership, role, and the member's read cursor</td>
+        <td>Composite PK <code>(conversation_id, user_id)</code>; role CHECK; partial index for active membership</td></tr>
+      <tr><td><code>messages</code></td><td>Logical message and routing metadata — no content column</td>
+        <td>Unique <code>(conversation_id, seq)</code>, <code>(sender_id, client_message_id)</code>, <code>(id, conversation_id)</code></td></tr>
+      <tr><td><code>message_payloads</code></td><td>Opaque ciphertext, one row per revision and target</td>
+        <td>Partial uniques for shared and per-device envelopes; <code>ciphertext bytea NOT NULL</code></td></tr>
+      <tr><td><code>processed_events</code></td><td>Consumer-side deduplication ledger</td>
+        <td>PK <code>event_id</code>; index on <code>(aggregate_type, aggregate_id)</code> for stale-version checks</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout warn">
+    <strong>What is deliberately absent</strong>
+    No <code>body</code> column, no <code>crypto_epoch</code>, no
+    <code>device_key_packages</code>, no ciphersuite columns, no partitioning, and
+    no server-side extension of <code>outbox_events</code> beyond what the existing
+    migration already defines. UUIDs are minted in application code (UUIDv7), never
+    by the database, so migrations contain no <code>gen_random_uuid()</code>.
+  </div>
+</section>
+
+<!-- ============================ 6. INTEGRITY ============================ -->
+<section class="section page-break">
+  <div class="section-head"><span class="num">6</span><h3>Integrity rules and constraints</h3></div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h5>Sequence issuance is the only serialization point</h5>
+      <pre><span class="cm">-- one transaction, one row lock</span>
+UPDATE conversations
+   SET last_seq = last_seq + 1
+ WHERE id = $1
+RETURNING last_seq;</pre>
+      <p>Messages in different conversations proceed concurrently; messages in the
+      same conversation serialize on this row. No global writer exists anywhere in
+      the design.</p>
+    </div>
+    <div class="card teal">
+      <h5>Composite foreign keys that pin identity</h5>
+      <pre>messages(sender_device_id, sender_id)
+  → chat_devices(id, user_id)
+
+messages(reply_to_id, conversation_id)
+  → messages(id, conversation_id)</pre>
+      <p>A device can never appear to belong to another sender, and a reply can
+      never point at a message in a different conversation — enforced by the
+      database, not by application code.</p>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h5>Envelope shape is a partial unique, not a CHECK</h5>
+      <pre>UNIQUE (message_id, revision_no)
+  WHERE recipient_device_id IS NULL
+
+UNIQUE (message_id, revision_no, recipient_device_id)
+  WHERE recipient_device_id IS NOT NULL</pre>
+      <p>Shared and per-device rows for the same revision are mutually exclusive at
+      the index level. Mixing them is a service-layer invariant — a row-level CHECK
+      cannot prove the absence of sibling rows.</p>
+    </div>
+    <div class="card">
+      <h5>Enums kept in sync with the audit table</h5>
+      <p><code>conversations.kind</code> → <code>direct</code>, <code>community</code><br/>
+      <code>conversation_members.role</code> → <code>member</code>, <code>admin</code><br/>
+      <code>chat_devices.status</code> → <code>active</code>, <code>revoked</code>, <code>pending_verification</code><br/>
+      <code>chat_devices.platform</code> → <code>android</code>, <code>ios</code>, <code>web</code><br/>
+      <code>messages.payload_kind</code> → <code>text</code>, <code>media</code>, <code>voice</code>, <code>system</code>, <code>control</code><br/>
+      <code>messages.payload_mode</code> → <code>shared</code>, <code>per_device</code></p>
+      <p><code>payload_kind</code> keeps <code>control</code> because the audit table
+      already enumerates it; the slice's contract still fixes sends to
+      <code>text</code> + <code>shared</code>.</p>
+    </div>
+  </div>
+
+  <div class="callout">
+    <strong>Kind-guarded shape rules</strong>
+    <code>conversations</code> carries two guarded CHECKs — direct rows must set
+    <code>direct_key</code> and clear both community columns; community rows must do
+    the reverse. Each rule is guarded by <code>kind</code> so it constrains only its
+    own kind, while <code>kind</code> itself is constrained separately. The
+    architecture text was corrected in this change to describe exactly that form.
+  </div>
+</section>
+
+<!-- ============================ 7. WORKFLOWS ============================ -->
+<section class="section page-break">
+  <div class="section-head"><span class="num">7</span><h3>End-to-end workflows</h3></div>
+
+  <h4>7.1 Sending a message — the critical path</h4>
+  <figure>
+    <div class="frame">
+      <div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant C as Client
+    participant A as Chat API
+    participant D as chat_db
+    participant R as Outbox relay
+    participant B as Broker
+
+    C->>A: POST /conversations/{id}/messages
+    A->>D: BEGIN
+    A->>D: check active membership + block state
+    A->>D: UPDATE conversations SET last_seq = last_seq + 1 RETURNING last_seq
+    A->>D: INSERT messages (seq, client_message_id, kind=text, mode=shared)
+    A->>D: INSERT message_payloads (ciphertext, revision_no = 1)
+    A->>D: INSERT outbox_events (chat.message.created)
+    A->>D: COMMIT
+    A-->>C: 201 MessageView {message_id, seq, revision_no, created_at}
+    R->>D: poll rows where published_at IS NULL
+    R->>B: POST /events (event_id)
+    B-->>R: 201 created / 200 identical duplicate
+    R->>D: SET published_at
+      </div>
+    </div>
+    <figcaption>Figure 2 — Acknowledgement happens only after commit; the event is written in the
+    same transaction as the business change, and publication happens after commit.</figcaption>
+  </figure>
+
+  <div class="callout warn">
+    <strong>Retry behaviour on this path</strong>
+    A retry with the same <code>client_message_id</code> and the same decoded body
+    returns <code>200</code> with the stored message; a concurrent race resolves
+    against the unique index and re-reads the winner rather than returning a 500.
+    A different body under the same id answers <code>409</code>.
+  </div>
+
+  <h4>7.2 Recovery and resync</h4>
+  <figure>
+    <div class="frame">
+      <div class="mermaid">
+flowchart LR
+    A["Client reconnects"] --> B{"Knows its last seq?"}
+    B -- "yes" --> C["GET /conversations/{id}/messages?after_seq=N"]
+    B -- "no" --> D["GET .../messages (newest page, limit 50)"]
+    C --> E{"next_cursor?"}
+    D --> E
+    E -- "yes" --> C
+    E -- "no" --> F["Apply envelopes locally, decrypt, dedupe on message_id"]
+      </div>
+    </div>
+    <figcaption>Figure 3 — Durable recovery always goes through REST with a stable <code>seq</code>
+    cursor. Live delivery may be missed; history never depends on it.</figcaption>
+  </figure>
+
+  <h4>7.3 Device lifecycle and conversation creation</h4>
+  <div class="grid-2">
+    <div class="card">
+      <h5>Register / revoke a device</h5>
+      <ol>
+        <li><code>POST /devices</code> with <code>identity_key_public</code> + fingerprint (caller from auth, never from body).</li>
+        <li>Same active fingerprint and identical key → <code>200</code>; different key → <code>409 identity_key_conflict</code>.</li>
+        <li>Insert <code>chat_devices</code> and <code>chat.device.registered</code> (aggregate <code>device</code>, version 1) in one transaction.</li>
+        <li><code>POST /devices/{id}/revoke</code> sets <code>status='revoked'</code> and emits version 2; repeats stay <code>200</code>.</li>
+      </ol>
+    </div>
+    <div class="card">
+      <h5>Create a direct conversation</h5>
+      <ol>
+        <li><code>POST /conversations {peer_user_id}</code>; the caller comes from auth — self-peer answers <code>400</code>.</li>
+        <li>Derive the deterministic <code>direct_key</code> from the sorted pair.</li>
+        <li>Insert <code>conversations</code> plus two <code>conversation_members</code> rows in one transaction; a repeat answers <code>200</code>.</li>
+        <li>Emit <code>chat.conversation.created</code> with no aggregate fields.</li>
+        <li>Block, friendship, and privacy checks answer <code>403 forbidden_direct_chat_not_permitted</code> once the projections land.</li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ 8. DECISIONS ============================ -->
+<section class="section page-break">
+  <div class="section-head"><span class="num">8</span><h3>Design decisions and rationale</h3></div>
+
+  <table>
+    <thead><tr><th>#</th><th>Decision</th><th>Rationale</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>Messages use <code>aggregate_type=message</code></td>
+        <td>Avoids exhausting the conversation version space that future receipts, tombstones, and membership events will need; order lives in <code>seq</code>.</td></tr>
+      <tr><td>2</td><td><code>createConversation</code> takes <code>peer_user_id</code> only</td>
+        <td>The caller is authoritative from auth; sending your own id invites canonicalisation mistakes and pointless <code>400</code>s.</td></tr>
+      <tr><td>3</td><td><code>ConversationView</code> embeds <code>viewer</code> state</td>
+        <td>Role and read cursor in the same response removes a second round trip and lets clients compute unread without inventing an endpoint.</td></tr>
+      <tr><td>4</td><td>Non-members receive <code>404</code>, not <code>403</code></td>
+        <td>Indistinguishable from "does not exist" — guessing a UUID must not confirm a conversation exists.</td></tr>
+      <tr><td>5</td><td><code>identity_key_public</code> is REST-only</td>
+        <td>Verification needs the key, but events stay metadata-only; a 256 KiB payload budget must never be consumed by key material.</td></tr>
+      <tr><td>6</td><td>Idempotency compares decoded values</td>
+        <td>JSON key order is not semantic; a client retry must never turn into a spurious <code>409</code>.</td></tr>
+      <tr><td>7</td><td><code>payload</code> is optional in <code>MessageView</code></td>
+        <td>A future tombstone returns metadata without ciphertext; requiring the field would force a breaking change at deletion time.</td></tr>
+      <tr><td>8</td><td>Single-value enums removed from the send request</td>
+        <td>Fields the caller cannot vary are noise; server-side defaults keep the request small and future values additive.</td></tr>
+      <tr><td>9</td><td>256 KiB body limit, shared with the broker</td>
+        <td>One platform-wide number instead of per-service limits that drift apart.</td></tr>
+      <tr><td>10</td><td><code>payload_encoding: base64</code> is required</td>
+        <td>Binary envelopes cannot appear in JSON implicitly; explicit encoding forbids sniffing and silent defaults.</td></tr>
+      <tr><td>11</td><td>Shared <code>503</code> response on every operation</td>
+        <td>Generated clients need to know outage behaviour; previously only the broker contract documented it.</td></tr>
+      <tr><td>12</td><td>Protocol-neutral storage only</td>
+        <td>Accepting MLS now would commit to a library gate that has not closed; <code>dev-opaque-v1</code> keeps the contract stable across the protocol decision.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ============================ 9. VERIFICATION ============================ -->
+<section class="section page-break">
+  <div class="section-head"><span class="num">9</span><h3>Verification</h3></div>
+
+  <p class="lead">Every gate below was executed; outputs are reproduced verbatim.</p>
+
+  <pre>$ python3 scripts/contracts/validate.py --base-ref origin/main
+OpenAPI OK: contracts/openapi/chat-api.yaml (3.1.0, version 1.0.0)
+OpenAPI OK: contracts/openapi/event-broker-api.yaml (3.1.0, version 1.0.0)
+Event schemas OK: 5 schema(s), 6 valid and 4 invalid example(s)
+Contracts validation OK.
+
+$ python3 scripts/ci/check-links.py
+Relative documentation links OK.
+
+$ python3 scripts/ci/check-changelog.py --all
+Change records OK.
+
+$ cd services/chat-service
+$ mix format --check-formatted            <span class="cm">exit 0</span>
+$ mix compile --warnings-as-errors        <span class="cm">exit 0</span>
+$ mix test
+Running ExUnit with seed: 567515, max_cases: 24
+Result: 6 passed</pre>
+
+  <table>
+    <thead><tr><th>Gate</th><th>What it proves</th></tr></thead>
+    <tbody>
+      <tr><td><code>validate.py</code></td><td>Both OpenAPI documents parse under 3.1, every <code>$ref</code> resolves, every payload schema is valid JSON Schema, all fixtures satisfy the envelope (6 valid / 4 invalid).</td></tr>
+      <tr><td><code>check-links.py</code></td><td>Every relative link added to the architecture, READMEs, and changelog resolves.</td></tr>
+      <tr><td><code>check-changelog.py</code></td><td>The change record exists with valid front matter and required sections.</td></tr>
+      <tr><td><code>mix test</code></td><td>The test alias creates and migrates <code>chat_db_test</code>, so all seven migrations ran against a real PostgreSQL 18.6.</td></tr>
+      <tr><td><code>ecto.rollback --all</code> + <code>ecto.migrate</code></td><td>Every migration is reversible; composite FKs, partial unique indexes, and CHECK constraints were re-verified through <code>pg_indexes</code> / <code>pg_constraint</code>.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout">
+    <strong>Independent review</strong>
+    A separate read-only reviewer inspected the full diff against the architecture
+    document, ADR 0007, ADR 0008, and the contract conventions. The verdict was
+    <em>approve with fixes</em>: six should-fix findings (a doc/SQL wording mismatch,
+    a missing <code>404</code>, versioning wording, a missing §8 enum row,
+    <code>payload</code> optionality, and undefined duplicate comparison) plus six
+    minor ones were all applied and re-verified before this document was generated.
+  </div>
+</section>
+
+<!-- ============================ 10. RISKS ============================ -->
+<section class="section page-break">
+  <div class="section-head"><span class="num">10</span><h3>Open risks and follow-ups</h3></div>
+
+  <table>
+    <thead><tr><th>Risk</th><th>Impact</th><th>Owner / next step</th></tr></thead>
+    <tbody>
+      <tr><td>Any future conversation-scoped event needs its own version counter</td>
+        <td>Choosing <code>aggregate_type=message</code> trades immediate ordering for headroom; a receipt or membership event cannot reuse <code>seq</code>.</td>
+        <td>An ADR introducing <code>conversations.event_version</code> before such an event ships. Not <code>crypto_state_version</code>.</td></tr>
+      <tr><td><code>outbox_events</code> shape drifts from architecture §3.18</td>
+        <td>The migration carries <code>event_id</code> + <code>envelope</code>; §3.18 recommends <code>type</code>, <code>schema_version</code>, <code>payload</code>, <code>trace_id</code>.</td>
+        <td>Reconcile before the events context is implemented.</td></tr>
+      <tr><td>Validator does not bind payload schemas to event types</td>
+        <td>A payload schema can be wrong and still pass CI; fixtures are validated against the envelope only.</td>
+        <td>Tooling follow-up in <code>scripts/contracts/validate.py</code>.</td></tr>
+      <tr><td>Authentication strategy is provisional</td>
+        <td>Scheme name and <code>401</code>/<code>403</code> semantics are stable; the credential format is not.</td>
+        <td>Architecture §9.1 decision, then a contract description update.</td></tr>
+      <tr><td>ADR 0014 is still <em>proposed</em></td>
+        <td>Commit authorization and the post-ban Remove Commit workflow are undecided.</td>
+        <td>Accept the ADR before any control-message endpoint or schema work.</td></tr>
+      <tr><td><code>direct</code> conversations are unenforceable in isolation</td>
+        <td>Block, friendship, and privacy projections do not exist yet; enforcement would fail closed against empty tables.</td>
+        <td>Social-integration slice owns those three tables; the contract already defines the <code>403</code>.</td></tr>
+      <tr><td>Timestamps are <code>timestamp without time zone</code></td>
+        <td>Ecto's <code>:utc_datetime_usec</code> vs the document's <code>timestamptz</code> convention — pre-existing, repo-wide.</td>
+        <td>Reconcile in the document or a migration decision; not changed in this slice.</td></tr>
+      <tr><td><code>sender_device_id</code> is NOT NULL</td>
+        <td>System and control messages may eventually need a sender-less row.</td>
+        <td>Resolve when the control-message slice lands.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ============================ 11. REFERENCES ============================ -->
+<section class="section">
+  <div class="section-head"><span class="num">11</span><h3>References</h3></div>
+  <table>
+    <tbody>
+      <tr><td><code>contracts/openapi/chat-api.yaml</code></td><td>The Chat REST contract — source of truth for every path, schema, and status code in this document.</td></tr>
+      <tr><td><code>contracts/events/chat/*.v1.schema.json</code></td><td>Event payload schemas for the four chat events.</td></tr>
+      <tr><td><code>contracts/events/common/event-envelope.schema.json</code></td><td>Shared envelope every event must satisfy.</td></tr>
+      <tr><td><code>services/chat-service/priv/repo/migrations/2026110600000{1..7}_*.exs</code></td><td>The seven neutral <code>chat_db</code> migrations.</td></tr>
+      <tr><td><code>docs/architecture/architecture-and-schema.md</code></td><td>Schema (§3), contract rules (§5), event catalog (§7), enum audit (§8).</td></tr>
+      <tr><td><code>docs/decisions/0007-e2ee-protocol-selection.md</code></td><td>Accepted: MLS, Chat as Delivery Service, opaque envelopes only.</td></tr>
+      <tr><td><code>docs/decisions/0008-broker-transport-and-delivery-contract.md</code></td><td>Accepted: HTTP claim-based pull, at-least-once, 256 KiB limit.</td></tr>
+      <tr><td><code>docs/decisions/0014-community-commit-authorization.md</code></td><td>Proposed: commit authorization and post-block removal — not encoded here.</td></tr>
+      <tr><td><code>contracts/VERSIONING.md</code></td><td>Additive vs breaking rules for REST and events.</td></tr>
+      <tr><td><code>docs/changelog/2026-11-06-chat-contract-slice-one.md</code></td><td>Change record for this slice.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout" style="margin-top: 24px;">
+    <strong>How to read this document</strong>
+    This PDF is a generated summary. When it disagrees with
+    <code>contracts/openapi/chat-api.yaml</code>, the architecture document, or an
+    ADR, the source file wins and this document must be regenerated.
+  </div>
+</section>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: "base",
+    themeVariables: {
+      fontFamily: "DejaVu Sans, Segoe UI, system-ui, sans-serif",
+      fontSize: "13px",
+      primaryColor: "#eff6ff",
+      primaryBorderColor: "#1d4ed8",
+      primaryTextColor: "#0f172a",
+      lineColor: "#475569",
+      secondaryColor: "#f0fdfa",
+      tertiaryColor: "#f8fafc",
+      actorBkg: "#eff6ff",
+      actorBorder: "#1d4ed8",
+      actorTextColor: "#0f172a",
+      actorLineColor: "#94a3b8",
+      signalColor: "#0f172a",
+      signalTextColor: "#0f172a",
+      noteBkgColor: "#fffbeb",
+      noteBorderColor: "#b45309",
+      noteTextColor: "#0f172a",
+      labelBoxBkgColor: "#f8fafc",
+      labelBoxBorderColor: "#1d4ed8",
+      labelTextColor: "#0f172a",
+      loopTextColor: "#0f172a",
+      fontSize: "13px"
+    },
+    flowchart: { curve: "basis", padding: 8 },
+    sequence: { mirrorActors: false, messageFontSize: 13, actorFontSize: 13 }
+  });
+</script>
+
+</body>
+</html>

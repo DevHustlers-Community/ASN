@@ -1,0 +1,850 @@
+openapi: 3.1.0
+info:
+  title: ASN Chat API
+  version: 1.0.0
+  description: >
+    Contract slice 1 of the Chat service: device registration, direct
+    conversations, opaque message envelopes, and read cursors. Every message
+    payload is an opaque envelope produced by the client; the server stores and
+    routes bytes and metadata only and has no plaintext `body` field in any
+    environment. `dev-opaque-v1` is the current development protocol identifier
+    and is replaced by the selected E2EE protocol (ADR 0007) without a contract
+    migration.
+
+    Request body limit: **256 KiB** for the whole HTTP request body on every
+    operation that accepts a body, enforced before parsing; over-large requests
+    answer `413` with `code: payload_too_large` (aligned with ADR 0008's broker
+    limit).
+
+    Authentication is provisional pending architecture §9.1: the `chatBearer`
+    scheme name and the 401/403 semantics are stable, the credential format is
+    not.
+servers:
+  - url: /api/v1
+security:
+  - chatBearer: []
+tags:
+  - name: devices
+    description: Linked client devices and their public identity key material.
+  - name: conversations
+    description: Direct conversations and their membership.
+  - name: messages
+    description: Opaque message envelopes and per-conversation ordering.
+paths:
+  /devices:
+    post:
+      tags: [devices]
+      operationId: registerDevice
+      summary: Register a device for the authenticated user
+      description: >
+        Registers one cryptographic device identity. UUIDv7 identifiers are
+        minted server-side in application code. The request body limit is
+        256 KiB.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterDeviceRequest' }
+      responses:
+        '201':
+          description: Device registered.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeviceView' }
+        '200':
+          description: >
+            Idempotent retry: the same authenticated user re-registers the same
+            active `identity_key_fingerprint` with byte-identical
+            `identity_key_public`. Returns the existing active device.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeviceView' }
+        '409':
+          description: >
+            Identity change conflict (`code: identity_key_conflict`): the same
+            fingerprint is active with different key bytes. Public key changes
+            are identity changes, never silent overwrites.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+    get:
+      tags: [devices]
+      operationId: listDevices
+      summary: List the authenticated user's devices
+      description: >
+        Returns the caller's devices only. No pagination: the set of linked
+        devices per user is small and bounded; a larger result set would be a
+        product decision, not a paging problem.
+      responses:
+        '200':
+          description: Devices owned by the authenticated user.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/DeviceView' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+
+  /devices/{deviceId}/revoke:
+    post:
+      tags: [devices]
+      operationId: revokeDevice
+      summary: Revoke one of the authenticated user's devices (idempotent)
+      parameters:
+        - name: deviceId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: >
+            Device revoked, or it was already revoked: idempotent, the current
+            state is returned.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeviceView' }
+        '404':
+          description: >
+            Unknown device or another user's device (`code: not_found`), shown
+            indistinguishably to avoid an existence leak.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+
+  /conversations:
+    post:
+      tags: [conversations]
+      operationId: createConversation
+      summary: Create (or get) a direct conversation with a peer
+      description: >
+        The server derives the caller from the authentication context; only a
+        peer user id is accepted. Direct conversations are deterministic for
+        the pair of user ids, so no `Idempotency-Key` header is needed. This
+        contract slice is protocol-neutral: it creates the conversation row and
+        does not encode commit authorization (ADR 0014 is still proposed).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateConversationRequest' }
+      responses:
+        '201':
+          description: Direct conversation created; the caller is a member.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ConversationView' }
+        '200':
+          description: >
+            Idempotent: the deterministic direct conversation between caller
+            and peer already exists.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ConversationView' }
+        '403':
+          description: >
+            `code: forbidden_direct_chat_not_permitted`: a platform block, the
+            peer's chat privacy settings, or the friendship gate denies opening
+            this direct chat. Enforcement lands in a later slice; the code is
+            reserved here.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '422':
+          description: >
+            `code: unprocessable`: the peer projection is unknown (the peer has
+            no chat identity projection yet).
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+    get:
+      tags: [conversations]
+      operationId: listConversations
+      summary: List the authenticated user's active conversations (inbox)
+      description: >
+        Ordered by `(last_message_at DESC NULLS LAST, id DESC)`. Cursor
+        pagination only; offset pagination is not supported. `last_message_at`
+        is inbox ordering metadata, not a complete offline sync cursor.
+      parameters:
+        - name: limit
+          in: query
+          description: Page size, at most 100 (default 20).
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - name: cursor
+          in: query
+          description: Continuation token from `next_cursor`.
+          schema: { type: string }
+      responses:
+        '200':
+          description: Inbox page for the authenticated user.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/ConversationView' }
+                  next_cursor:
+                    $ref: '#/components/schemas/Cursor'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '422':
+          description: >
+            A cursor that cannot be parsed or was issued for another resource
+            (`code: unprocessable`).
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+
+  /conversations/{conversationId}:
+    get:
+      tags: [conversations]
+      operationId: getConversation
+      summary: Get one conversation of which the caller is a member
+      parameters:
+        - $ref: '#/components/parameters/ConversationId'
+      responses:
+        '200':
+          description: Conversation as seen by the caller.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ConversationView' }
+        '404':
+          description: >
+            Unknown conversation or non-member (`code: not_found`),
+            indistinguishable to avoid an existence leak.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+
+  /conversations/{conversationId}/members:
+    get:
+      tags: [conversations]
+      operationId: listConversationMembers
+      summary: List active members of one conversation
+      description: >
+        Returns active members only (`left_at IS NULL`). Ordered by
+        `(joined_at, user_id)` and cursor paginated. Member views never expose
+        another member's `last_read_seq`.
+      parameters:
+        - $ref: '#/components/parameters/ConversationId'
+        - name: limit
+          in: query
+          description: Page size, at most 200 (default 50).
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+        - name: cursor
+          in: query
+          description: Continuation token from `next_cursor`.
+          schema: { type: string }
+      responses:
+        '200':
+          description: Member page.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/MemberView' }
+                  next_cursor:
+                    $ref: '#/components/schemas/Cursor'
+        '404':
+          description: >
+            Unknown conversation or non-member (`code: not_found`),
+            indistinguishable to avoid an existence leak.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+
+  /conversations/{conversationId}/messages:
+    post:
+      tags: [messages]
+      operationId: sendMessage
+      summary: Send one opaque message envelope (idempotent on client_message_id)
+      description: >
+        The request carries `client_message_id`, optional `reply_to_id`, and an
+        opaque `payload`. It deliberately has no `payload_kind`/`payload_mode`
+        field: this slice fixes them server-side to `text`/`shared` and returns
+        those values in the response. The request body limit is 256 KiB.
+        Idempotency is keyed by `client_message_id` within the same
+        conversation: a repeat with the same canonicalized request body (the
+        same `reply_to_id` and the same decoded `payload` bytes; JSON key order
+        is insignificant, comparison is on decoded values, never raw request
+        bytes) answers `200` with the original `MessageView`; any other
+        difference answers `409` with `code: duplicate_client_message_id`. `payload_kind`/`payload_mode` will become a
+        caller choice only when a later slice needs media or per-device modes.
+      parameters:
+        - $ref: '#/components/parameters/ConversationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SendMessageRequest' }
+      responses:
+        '201':
+          description: Message accepted and sequenced.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MessageView' }
+        '200':
+          description: >
+            Duplicate send: the same `client_message_id` from the same sender
+            with identical request content; the stored message is returned.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MessageView' }
+        '409':
+          description: >
+            `code: duplicate_client_message_id`: the same `client_message_id`
+            was reused with different request content; no message changed.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '403':
+          description: >
+            `code: forbidden`; reserved for a member blocked from sending in a
+            direct conversation (block/friendship policy, enforced in later
+            slices).
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '404':
+          description: >
+            Unknown conversation or non-member (`code: not_found`),
+            indistinguishable to avoid an existence leak.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '422':
+          description: >
+            `code: unprocessable`: unknown `reply_to_id`, or the reply target
+            exists in another conversation.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+    get:
+      tags: [messages]
+      operationId: listMessages
+      summary: Page through message envelopes of one conversation
+      description: >
+        Exactly one of `cursor`, `after_seq`, or `before_seq` may be used;
+        combining more than one answers `400` with
+        `code: invalid_request`. A cursor is bound to the path
+        `conversationId`; a mismatch answers `422` with `code: unprocessable`.
+        Ordered by `seq` ascending within the conversation; per-conversation
+        ordering only, never a global order.
+      parameters:
+        - $ref: '#/components/parameters/ConversationId'
+        - name: limit
+          in: query
+          description: Page size, at most 200 (default 50).
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+        - name: cursor
+          in: query
+          description: Continuation token from `next_cursor`.
+          schema: { type: string }
+        - name: after_seq
+          in: query
+          description: >
+            Messages with `seq` greater than this value; reconnect recovery.
+          schema: { type: integer, minimum: 0 }
+        - name: before_seq
+          in: query
+          description: >
+            Messages with `seq` less than this value; backward history paging.
+          schema: { type: integer, minimum: 0 }
+      responses:
+        '200':
+          description: Message page.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/MessageView' }
+                  next_cursor:
+                    $ref: '#/components/schemas/Cursor'
+        '400':
+          description: >
+            Missing or malformed parameters, including conflicting paging
+            parameters (`code: invalid_request`).
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '422':
+          description: >
+            A cursor bound to another conversation (`code: unprocessable`).
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '404':
+          description: >
+            Unknown conversation or non-member (`code: not_found`),
+            indistinguishable to avoid an existence leak.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+
+  /conversations/{conversationId}/read-cursor:
+    post:
+      tags: [messages]
+      operationId: updateReadCursor
+      summary: Advance the caller's read cursor (forward-only)
+      description: >
+        Updates `conversation_members.last_read_seq` for the caller.
+        Forward-only: a lower value is a no-op and the stored effective value
+        is echoed. `last_seq - last_read_seq` is a rough sequence gap, not an
+        exact unread count; it includes the viewer's own and system/control
+        messages.
+      parameters:
+        - $ref: '#/components/parameters/ConversationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [last_read_seq]
+              properties:
+                last_read_seq:
+                  type: integer
+                  minimum: 0
+                  description: >
+                    Highest message `seq` the caller acknowledges as read.
+      responses:
+        '200':
+          description: >
+            Stored effective read cursor (the submitted value, or the stored
+            one when the submission was lower: forward-only).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReadCursor' }
+        '422':
+          description: >
+            `code: unprocessable`: `last_read_seq` exceeds
+            `conversations.last_seq`; no cursor advanced.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '404':
+          description: >
+            Unknown conversation or non-member (`code: not_found`),
+            indistinguishable to avoid an existence leak.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '422':
+          description: >
+            A cursor that cannot be parsed or was issued for another resource
+            (`code: unprocessable`).
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+
+components:
+  securitySchemes:
+    chatBearer:
+      type: http
+      scheme: bearer
+      description: >
+        Provisional pending architecture §9.1: the scheme name and the
+        401/403 semantics are stable, the credential format is not.
+  parameters:
+    ConversationId:
+      name: conversationId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  responses:
+    BadRequest:
+      description: >
+        Invalid request (`code: invalid_request` / `code: bad_request` class
+        errors such as malformed parameters).
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Unauthorized:
+      description: 'Missing or invalid authentication (`code: unauthorized`).'
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Unprocessable:
+      description: >
+        Semantically unprocessable request (`code: unprocessable`) or a rule
+        conflict; the stable `code` in the problem body discriminates.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    PayloadTooLarge:
+      description: >
+        Request body exceeds the 256 KiB limit (`code: payload_too_large`),
+        enforced before parsing.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    RateLimited:
+      description: 'Too many requests (`code: rate_limited`).'
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    ServiceUnavailable:
+      description: >
+        The service is temporarily unable to handle the request
+        (`code: service_unavailable`), for example because the database or a
+        required dependency is unreachable; safe to retry later.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+  schemas:
+    Base64Bytes:
+      type: string
+      format: byte
+      description: Base64-encoded opaque bytes. Never plaintext.
+    OpaquePayload:
+      type: object
+      description: >
+        Opaque client-produced envelope. The server never opens it; there is
+        no plaintext body anywhere in the system.
+      additionalProperties: false
+      required: [payload_encoding, ciphertext]
+      properties:
+        payload_encoding:
+          type: string
+          enum: [base64]
+        ciphertext:
+          type: string
+          format: byte
+    ErrorCode:
+      type: string
+      description: >
+        Stable error codes; clients must not branch on titles or details.
+      enum:
+        - unauthorized
+        - forbidden
+        - forbidden_direct_chat_not_permitted
+        - not_found
+        - conflict
+        - invalid_request
+        - unprocessable
+        - payload_too_large
+        - rate_limited
+        - identity_key_conflict
+        - duplicate_client_message_id
+        - service_unavailable
+    ProblemFieldError:
+      type: object
+      additionalProperties: false
+      required: [path, code]
+      properties:
+        path: { type: string }
+        code: { type: string }
+        detail: { type: string }
+    Problem:
+      type: object
+      description: RFC 9457 Problem Details with a stable Chat error code.
+      additionalProperties: false
+      required: [type, title, status, code, request_id]
+      properties:
+        type:
+          type: string
+          format: uri
+          description: Problem type URI; `about:blank` when no specific type applies.
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        code:
+          $ref: '#/components/schemas/ErrorCode'
+        request_id:
+          type: string
+          description: >
+            Request correlation identifier (usually a UUID), also echoed in
+            logs and traces.
+        errors:
+          type: array
+          description: >
+            Optional field-level validation errors; shown for a subset of
+            request validation failures.
+          items: { $ref: '#/components/schemas/ProblemFieldError' }
+    IdentityKeyPublic:
+      $ref: '#/components/schemas/Base64Bytes'
+    RegisterDeviceRequest:
+      type: object
+      additionalProperties: false
+      required: [platform, identity_key_public, identity_key_fingerprint]
+      properties:
+        platform:
+          type: string
+          enum: [android, ios, web]
+        device_label:
+          type: string
+          maxLength: 80
+          description: Optional user-visible label; treated as untrusted input.
+        identity_key_public:
+          $ref: '#/components/schemas/IdentityKeyPublic'
+        identity_key_fingerprint:
+          type: string
+          minLength: 16
+          maxLength: 128
+          description: >
+            Stable display/verification fingerprint derived by the client or
+            protocol; a repeated active fingerprint with different key bytes is
+            rejected.
+    DeviceView:
+      type: object
+      additionalProperties: false
+      required:
+        - device_id
+        - platform
+        - identity_key_public
+        - identity_key_fingerprint
+        - status
+        - created_at
+      properties:
+        device_id: { type: string, format: uuid }
+        platform:
+          type: string
+          enum: [android, ios, web]
+        device_label: { type: string, maxLength: 80 }
+        identity_key_public:
+          $ref: '#/components/schemas/Base64Bytes'
+        identity_key_fingerprint: { type: string, minLength: 16, maxLength: 128 }
+        status:
+          type: string
+          enum: [active, revoked, pending_verification]
+        created_at: { type: string, format: date-time }
+        last_seen_at: { type: string, format: date-time }
+        revoked_at: { type: string, format: date-time }
+    CreateConversationRequest:
+      type: object
+      additionalProperties: false
+      required: [peer_user_id]
+      properties:
+        peer_user_id:
+          type: string
+          format: uuid
+          description: >
+            Peer account projection. The caller is derived from the
+            authentication context, never from the body. Addressing yourself
+            (`peer_user_id == caller`) answers `400` with
+            `code: invalid_request`.
+    ViewerState:
+      type: object
+      description: >
+        The caller's own membership state inside the conversation. Other
+        members' read cursors are never exposed.
+      additionalProperties: false
+      required: [role, last_read_seq, joined_at, membership_version]
+      properties:
+        role:
+          type: string
+          enum: [member, admin]
+        last_read_seq:
+          type: integer
+          description: >
+            Caller's read cursor. `last_seq - last_read_seq` is a rough
+            sequence gap, not an exact unread count.
+        joined_at: { type: string, format: date-time }
+        muted_until: { type: string, format: date-time }
+        membership_version: { type: integer }
+    ConversationView:
+      type: object
+      additionalProperties: false
+      required:
+        - conversation_id
+        - kind
+        - last_seq
+        - crypto_protocol
+        - crypto_protocol_version
+        - created_at
+        - viewer
+      properties:
+        conversation_id: { type: string, format: uuid }
+        kind:
+          type: string
+          enum: [direct, community]
+        title: { type: string }
+        community_id:
+          type: string
+          format: uuid
+          description: >
+            Soft reference: `ref: social_db.communities.id`. Community scopes
+            land in a later slice.
+        channel_id:
+          type: string
+          format: uuid
+          description: 'Soft reference: `ref: social_db.community_channels.id`.'
+        last_seq:
+          type: integer
+          description: >
+            Monotonic sequence issued by transactionally updating the
+            conversation row; per-conversation ordering only.
+        last_message_at: { type: string, format: date-time }
+        crypto_protocol:
+          type: string
+          description: >
+            Envelope/protocol identifier understood by clients, e.g.
+            `dev-opaque-v1` until the real protocol (ADR 0007) is selected.
+        crypto_protocol_version: { type: integer }
+        created_at: { type: string, format: date-time }
+        viewer:
+          $ref: '#/components/schemas/ViewerState'
+    MemberView:
+      type: object
+      description: >
+        Active membership view. Deliberately omits `last_read_seq`: another
+        member's read cursor is never exposed; each viewer gets its own state
+        in `ConversationView.viewer`.
+      additionalProperties: false
+      required: [user_id, role, joined_at, membership_version]
+      properties:
+        user_id: { type: string, format: uuid }
+        role:
+          type: string
+          enum: [member, admin]
+        joined_at: { type: string, format: date-time }
+        membership_version: { type: integer }
+    SendMessageRequest:
+      type: object
+      additionalProperties: false
+      required: [client_message_id, payload]
+      properties:
+        client_message_id:
+          type: string
+          format: uuid
+          description: >
+            Client idempotency key, unique per sender. Content-hash comparison
+            decides between a duplicate (200) and a conflict (409).
+        reply_to_id:
+          type: string
+          format: uuid
+          description: >
+            Quoted message. The target must exist in the same conversation;
+            the quoted text itself stays encrypted.
+        payload:
+          $ref: '#/components/schemas/OpaquePayload'
+    MessageView:
+      type: object
+      additionalProperties: false
+      required:
+        - message_id
+        - conversation_id
+        - seq
+        - sender_id
+        - sender_device_id
+        - client_message_id
+        - payload_kind
+        - payload_mode
+        - revision_no
+        - created_at
+        - updated_at
+      properties:
+        message_id: { type: string, format: uuid }
+        conversation_id: { type: string, format: uuid }
+        seq:
+          type: integer
+          description: Conversation-local ordering sequence.
+        sender_id: { type: string, format: uuid }
+        sender_device_id:
+          type: string
+          format: uuid
+          description: >
+            Device that produced the envelope; must belong to `sender_id`.
+        client_message_id: { type: string, format: uuid }
+        payload_kind:
+          type: string
+          enum: [text, media, voice, system, control]
+          description: >
+            Fixed to `text` by this contract slice; media/voice/system/control
+            require later slices. Coarse routing metadata only; fine-grained
+            media attributes stay inside the encrypted payload.
+        payload_mode:
+          type: string
+          enum: [shared, per_device]
+          description: >
+            Fixed to `shared` by this contract slice: one group ciphertext for
+            all authorized members.
+        reply_to_id: { type: string, format: uuid }
+        revision_no:
+          type: integer
+          minimum: 1
+          description: >
+            Payload revision for this message; grows with edits, starting
+            at 1. Clients replace displayed content only after successful
+            local decryption of the newest revision.
+        payload:
+          $ref: '#/components/schemas/OpaquePayload'
+          description: >
+            Most recent revision (`revision_no`) of the envelope. Absent only
+            when `deleted_at` is set and no ciphertext is returned.
+        edited_at: { type: string, format: date-time }
+        deleted_at:
+          type: string
+          format: date-time
+          description: Tombstone for "delete for everyone"; ciphertext history is not forced away from clients that already copied it.
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    Cursor:
+      type: string
+      description: >
+        Opaque continuation token (base64url). The server binds a token to the
+        resource path it was issued for; clients must not parse it. Carried
+        content: `messages: {v, conversation_id, seq}`, `inbox: {v,
+        last_message_at, id}`, and `members: {v, joined_at, user_id}`. A token
+        for another conversation answers `422 unprocessable`.
+    ReadCursor:
+      type: object
+      additionalProperties: false
+      required: [last_read_seq]
+      properties:
+        last_read_seq:
+          type: integer
+          description: >
+            Stored effective read cursor for the caller; `last_seq -
+            last_read_seq` is a rough gap, not an exact unread count.

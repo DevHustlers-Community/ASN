@@ -3,10 +3,19 @@
 Elixir + Phoenix + Ecto service that owns `chat_db`.
 
 **Status:** scaffolded API-only service. The service compiles, boots, and connects
-to PostgreSQL, but it has no product endpoints, contexts, or migrations yet.
-Persisted envelope formats remain blocked by the E2EE decisions in
-[ADR 0007](../../docs/decisions/README.md) and
+to PostgreSQL. Contract slice 1 has landed — the OpenAPI contract
+([`contracts/openapi/chat-api.yaml`](../../contracts/openapi/chat-api.yaml)),
+the Chat event payload schemas
+([`contracts/events/chat/`](../../contracts/events/chat/)), and the
+protocol-neutral migrations below — but there are no product endpoints or
+contexts yet. Persisted envelope formats remain blocked by the E2EE decisions
+in [ADR 0007](../../docs/decisions/README.md) and
 [ADR 0009](../../docs/decisions/README.md).
+
+Two contract notes before any endpoint is implemented: every Chat request body
+limit is 256 KiB (aligned with the broker's ADR 0008 limit), and Chat
+authentication is provisional pending architecture §9.1 — the `chatBearer`
+scheme name and 401/403 semantics are stable, the credential format is not.
 
 **Owns:** friendships, chat privacy settings, direct and community
 conversations, conversation membership, opaque message envelopes, public device
@@ -42,7 +51,7 @@ the planned contexts.
 | `lib/asn_chat_web/router.ex` | Empty `/api` scope; no routes yet |
 | `lib/asn_chat_web/telemetry.ex` | Endpoint telemetry |
 | `config/` | Compile-time configuration plus dev/test/prod/runtime split |
-| `priv/repo/migrations/` | Chat-owned migrations; intentionally empty |
+| `priv/repo/migrations/` | Chat-owned migrations: the `chat_db` schema tables from the architecture document (users, conversations, members, devices, messages, message payloads, processed events) plus the existing outbox table |
 | `test/` | ExUnit tests and ConnCase/DataCase support |
 
 ## Planned contexts (`lib/asn_chat/`)
