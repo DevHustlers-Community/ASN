@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>ASN API Documentation — Event Broker</title>
+  <title>ASN API Documentation</title>
   <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
   <style>
     body { margin: 0; }
@@ -16,7 +16,11 @@
   <script>
     window.onload = function () {
       window.ui = SwaggerUIBundle({
-        url: "./event-broker-api.yaml",
+        urls: [
+          { url: "./event-broker-api.yaml", name: "Event Broker" },
+          { url: "./chat-api.yaml", name: "Chat" },
+        ],
+        "urls.primaryName": "Event Broker",
         dom_id: "#swagger-ui",
         deepLinking: true,
         presets: [SwaggerUIBundle.presets.apis, SwaggerUIStandalonePreset],

@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "chat/chat.device.registered.v1.schema.json",
+  "title": "chat.device.registered payload (v1)",
+  "description": "Emitted when a linked device completes registration on the Chat service. Public device metadata only: identity_key_fingerprint is a client-derived verification string, and raw public key bytes, device labels, and private key material never appear in events of this type. Envelope contract: aggregate_type 'device', aggregate_id 'device_id', aggregate_version 1 (the first version of the device aggregate).",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "device_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Server-assigned device record ID; soft reference to chat_db.chat_devices.id."
+    },
+    "user_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Device owner; soft reference to chat_db.chat_users.id (same ID as social_db.users.id)."
+    },
+    "platform": {
+      "type": "string",
+      "enum": ["android", "ios", "web"]
+    },
+    "identity_key_fingerprint": {
+      "type": "string",
+      "description": "Stable, client-derived verification fingerprint of the device identity key."
+    }
+  },
+  "required": ["device_id", "user_id", "platform", "identity_key_fingerprint"]
+}

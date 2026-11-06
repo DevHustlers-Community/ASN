@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "chat/chat.device.revoked.v1.schema.json",
+  "title": "chat.device.revoked payload (v1)",
+  "description": "Emitted when a linked device is revoked; consumers invalidate device-bound sessions, delivery targets, and key state. Identifier-level metadata only. Envelope contract: aggregate_type 'device', aggregate_id 'device_id', aggregate_version 2 (the revocation is the second and latest version of the device aggregate after registration with version 1).",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "device_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Server-assigned device record ID; soft reference to chat_db.chat_devices.id."
+    },
+    "user_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Device owner; soft reference to chat_db.chat_users.id."
+    }
+  },
+  "required": ["device_id", "user_id"]
+}

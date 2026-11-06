@@ -1,0 +1,20 @@
+{
+  "event_id": "0190f1e2-c004-7d5e-8f60-7a8b9c0d1e25",
+  "type": "chat.message.created",
+  "schema_version": 1,
+  "occurred_at": "2026-11-06T12:05:05Z",
+  "aggregate_type": "message",
+  "aggregate_id": "0190f1e2-b2c3-7d4e-9f50-6a7b8c9d0e12",
+  "aggregate_version": 1,
+  "trace_id": "4bf92f3577b34da6a3ce929d0e0e5f38",
+  "payload": {
+    "conversation_id": "0190f1e2-a1b2-7c3d-8e4f-5a6b7c8d9e01",
+    "message_id": "0190f1e2-b2c3-7d4e-9f50-6a7b8c9d0e12",
+    "seq": 1,
+    "sender_id": "0190f1e2-6d7e-7f80-b192-3d4e5f607182",
+    "sender_device_id": "0190f1e2-9b0c-7d2e-9f30-4a5b6c7d8e90",
+    "payload_kind": "text",
+    "payload_mode": "shared",
+    "reply_to_id": null
+  }
+}

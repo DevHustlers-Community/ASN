@@ -408,7 +408,13 @@ A direct chat or a community chat channel.
 | `crypto_state_version` | bigint | NOT NULL DEFAULT 0 | Monotonic version incremented on membership/device/key-state changes where applicable. |
 | `created_at` | timestamptz | NOT NULL | |
 
-Checks: `kind IN ('direct','community')`; direct rows require `direct_key`; community rows require `channel_id` and `community_id` when the channel model requires both. Write explicit checks rather than relying on a permissive `kind <> ...` expression.
+Checks: `kind IN ('direct','community')`; each kind also has a shape rule:
+direct rows require `direct_key IS NOT NULL AND community_id IS NULL AND
+channel_id IS NULL`, and community rows require
+`direct_key IS NULL AND channel_id IS NOT NULL AND community_id IS NOT NULL`.
+Each shape rule is a kind-guarded CHECK (`kind <> '...' OR (...)`) so it
+constrains only its own kind; `kind` itself is separately constrained by its
+own CHECK, and the rules are kept in sync with the `conversations` migration.
 
 Indexes: `(last_message_at DESC, id DESC)` and any inbox-specific indexes justified by actual queries.
 
@@ -884,6 +890,8 @@ All events include `event_id`, `schema_version`, `occurred_at`, and where feasib
 | `channel.created` / `channel.updated` / `channel.deleted` | Social API | Chat | Create/update/close the corresponding Chat conversation. |
 | `member.joined` / `member.left` / `member.banned` / `member.unbanned` | Social API | Chat | Update membership and permissions; advance crypto state/rekey when needed. |
 | `chat.device.registered` / `chat.device.revoked` | Chat | Linked devices / Chat consumers | Device lifecycle and session invalidation. Public device metadata only. |
+| `chat.conversation.created` | Chat | Chat consumers | Direct-conversation creation; one-shot creation event without aggregate fields. |
+| `chat.message.created` | Chat | Chat consumers | Message metadata only (identifiers, `seq`, `payload_kind`, `payload_mode`, null-or-id `reply_to_id`); never ciphertext. The envelope aggregate is the message, not the conversation. |
 | `report.created` | Social API or Chat | Moderation | Create report/case; encrypted-message reports include only explicitly submitted evidence. |
 | `moderation.action.requested` | Moderation | Social API, Chat | Ask the owning service to apply a decision. |
 | `moderation.action.applied` | Social API or Chat | Moderation | Update action delivery status. |
@@ -905,6 +913,7 @@ Keep these value lists aligned with actual SQL checks:
 | `conversations.kind` | `direct`, `community` |
 | `conversation_members.role` | `member`, `admin` |
 | `chat_devices.status` | `active`, `revoked`, `pending_verification` |
+| `chat_devices.platform` | `android`, `ios`, `web` |
 | `messages.payload_kind` | `text`, `media`, `voice`, `system`, `control` |
 | `messages.payload_mode` | `shared`, `per_device` |
 | `media_uploads.kind` | `image`, `video`, `voice`, `file` (or one opaque type if minimizing metadata leak) |

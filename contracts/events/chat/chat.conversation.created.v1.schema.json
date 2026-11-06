@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "chat/chat.conversation.created.v1.schema.json",
+  "title": "chat.conversation.created payload (v1)",
+  "description": "Emitted when a deterministic direct conversation is created. This is a one-shot creation event: the envelope carries no aggregate fields (aggregate_type/aggregate_id/aggregate_version are absent), because creation is not a versioned mutation of an existing aggregate. member_user_ids contains exactly the two projected member accounts, derived from the sorted deterministic pair.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "conversation_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Soft reference to chat_db.conversations.id."
+    },
+    "kind": {
+      "type": "string",
+      "const": "direct",
+      "description": "This slice emits only direct conversations; community channels are created by the isomorphic community flow."
+    },
+    "member_user_ids": {
+      "type": "array",
+      "items": { "type": "string", "format": "uuid" },
+      "minItems": 2,
+      "maxItems": 2,
+      "description": "Exactly the two member accounts; soft references to chat_db.chat_users.id. Read cursors are per user and never appear here."
+    },
+    "crypto_protocol": {
+      "type": "string",
+      "description": "Envelope/protocol identifier for the conversation, e.g. dev-opaque-v1."
+    },
+    "crypto_protocol_version": {
+      "type": "integer",
+      "minimum": 1
+    }
+  },
+  "required": [
+    "conversation_id",
+    "kind",
+    "member_user_ids",
+    "crypto_protocol",
+    "crypto_protocol_version"
+  ]
+}

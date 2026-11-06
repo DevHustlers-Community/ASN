@@ -1,0 +1,2 @@
+# Binary documents — never normalise line endings or diff as text.
+*.pdf binary

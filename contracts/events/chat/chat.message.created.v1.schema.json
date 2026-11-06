@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "chat/chat.message.created.v1.schema.json",
+  "title": "chat.message.created payload (v1)",
+  "description": "Emitted when a message logical row is created and sequenced. Identifier- and metadata-level only; this event never includes ciphertext, payload bytes, device labels, raw public keys, or plaintext chat content. Envelope contract: aggregate_type 'message', aggregate_id 'message_id', aggregate_version 1. Rationale for the message aggregate: using the message itself as the aggregate keeps 'aggregate_version' from being overloaded with the conversation-level version space, since a conversation produces one message row per sequence number; per-conversation ordering is carried by 'seq' in this payload, and consumers must never infer conversation-scoped ordering or aggregate currency from broker aggregate_version of other aggregates.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "conversation_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Soft reference to chat_db.conversations.id."
+    },
+    "message_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Soft reference to chat_db.messages.id; also the envelope aggregate_id."
+    },
+    "seq": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Conversation-local ordering sequence issued by locking and updating conversations.last_seq; authoritative for per-conversation ordering."
+    },
+    "sender_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Sender account; soft reference to chat_db.chat_users.id."
+    },
+    "sender_device_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Device that produced the envelope; soft reference to chat_db.chat_devices.id and known to belong to sender_id."
+    },
+    "payload_kind": {
+      "type": "string",
+      "enum": ["text", "media", "voice", "system", "control"],
+      "description": "Coarse routing/UX metadata only."
+    },
+    "payload_mode": {
+      "type": "string",
+      "enum": ["shared", "per_device"],
+      "description": "Delivery mode: 'shared' carries one group ciphertext for all authorized members, 'per_device' uses device-specific envelopes."
+    },
+    "reply_to_id": {
+      "type": ["string", "null"],
+      "format": "uuid",
+      "description": "Quoted message in the same conversation, or null. The quoted text itself stays encrypted and is never attached to this event."
+    }
+  },
+  "required": [
+    "conversation_id",
+    "message_id",
+    "seq",
+    "sender_id",
+    "sender_device_id",
+    "payload_kind",
+    "payload_mode",
+    "reply_to_id"
+  ]
+}
