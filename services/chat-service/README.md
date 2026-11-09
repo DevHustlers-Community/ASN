@@ -51,7 +51,7 @@ the planned contexts.
 | `lib/asn_chat_web/router.ex` | Empty `/api` scope; no routes yet |
 | `lib/asn_chat_web/telemetry.ex` | Endpoint telemetry |
 | `config/` | Compile-time configuration plus dev/test/prod/runtime split |
-| `priv/repo/migrations/` | Chat-owned migrations: the `chat_db` schema tables from the architecture document (users, conversations, members, devices, messages, message payloads, processed events) plus the existing outbox table |
+| `priv/repo/migrations/` | Chat-owned migrations: the `chat_db` schema tables from the architecture document (users, conversations, members, devices, messages, message payloads, processed events) plus the outbox table aligned to [ADR 0015](../../docs/decisions/0015-outbox-event-storage.md) |
 | `test/` | ExUnit tests and ConnCase/DataCase support |
 
 ## Planned contexts (`lib/asn_chat/`)

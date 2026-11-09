@@ -628,11 +628,13 @@ Indexes: `(user_id, created_at DESC)` and `(status, expires_at) WHERE status IN 
 
 ### 3.18 `outbox_events` and `processed_events`
 
-The same infrastructure concept exists in each service database. Recommended columns:
+The same infrastructure concept exists in each service database. Recommended columns ([ADR 0015](../decisions/0015-outbox-event-storage.md)):
 
-`outbox_events(id uuid PK, type text NOT NULL, aggregate_type text, aggregate_id uuid, aggregate_version bigint, schema_version integer NOT NULL DEFAULT 1, payload jsonb NOT NULL, trace_id uuid, created_at timestamptz NOT NULL, published_at timestamptz)`.
+`outbox_events(id uuid PK, type text NOT NULL, aggregate_type text, aggregate_id uuid, aggregate_version bigint, schema_version integer NOT NULL DEFAULT 1, occurred_at timestamptz NOT NULL, payload jsonb NOT NULL, trace_id text, created_at timestamptz NOT NULL, published_at timestamptz)`.
 
-Index: `(created_at, id) WHERE published_at IS NULL`.
+`id` is the event id (UUIDv7); there is no separate `event_id` column. `trace_id` is text because it may be a W3C trace id or a UUID. The producer stores the event fields, not a second copy of the envelope; the relay rebuilds the full envelope at publish time.
+
+Indexes: `(created_at, id) WHERE published_at IS NULL` for pickup and retention, and `(aggregate_type, aggregate_id, aggregate_version) WHERE published_at IS NULL` for per-aggregate relay ordering. A partial unique index on `(aggregate_type, aggregate_id, aggregate_version) WHERE aggregate_type IS NOT NULL` enforces one event per aggregate version.
 
 `processed_events(event_id uuid PRIMARY KEY, processed_at timestamptz NOT NULL, aggregate_type text, aggregate_id uuid, aggregate_version bigint)`.
 
