@@ -8,7 +8,11 @@ Checks:
 - every external ``$ref`` resolves to an existing file and JSON Pointer;
 - the broker ``EventEnvelope`` component matches the shared envelope schema;
 - every ``*.schema.json`` under ``contracts/events/`` is a valid JSON Schema;
-- every ``contracts/events/examples/valid-*.json`` satisfies the envelope;
+- every payload schema is named ``<event-type>.v<version>.schema.json`` and its
+  ``$id`` matches its path;
+- every ``contracts/events/examples/valid-*.json`` satisfies the envelope and,
+  when one exists, the payload schema named by its ``type`` and
+  ``schema_version``;
 - every ``contracts/events/examples/invalid-*.json`` is rejected by it;
 - on a pull request, a removed path, operation, or required field without an
   ``info.version`` bump fails the check.
@@ -23,6 +27,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -38,6 +43,9 @@ EVENTS_DIR = ROOT / "contracts" / "events"
 EXAMPLES_DIR = EVENTS_DIR / "examples"
 ENVELOPE_SCHEMA = EVENTS_DIR / "common" / "event-envelope.schema.json"
 HTTP_METHODS = {"get", "put", "post", "delete", "options", "head", "patch", "trace"}
+PAYLOAD_SCHEMA_NAME = re.compile(
+    r"^(?P<type>.+)\.v(?P<version>\d+)\.schema\.json$"
+)
 
 
 def relative(path: Path) -> str:
@@ -206,9 +214,79 @@ def validate_openapi(envelope) -> list[str]:
     return errors
 
 
+def payload_schema_index(
+    schema_paths: list[Path], schemas: dict[Path, dict]
+) -> tuple[dict[tuple[str, int], Path], set[str], list[str]]:
+    """Map ``(event_type, schema_version)`` to the payload schema file."""
+    index: dict[tuple[str, int], Path] = {}
+    namespaces: set[str] = set()
+    errors: list[str] = []
+
+    for path in schema_paths:
+        if path == ENVELOPE_SCHEMA or path not in schemas:
+            continue
+
+        label = relative(path)
+        match = PAYLOAD_SCHEMA_NAME.match(path.name)
+        if match is None:
+            errors.append(
+                f"{label}: payload schema name must be "
+                f"<event-type>.v<version>.schema.json"
+            )
+            continue
+
+        event_type = match.group("type")
+        version = int(match.group("version"))
+        key = (event_type, version)
+        if key in index:
+            errors.append(
+                f"{label}: duplicate payload schema for {event_type} "
+                f"version {version} (also {relative(index[key])})"
+            )
+            continue
+
+        index[key] = path
+        if path.parent != EVENTS_DIR:
+            namespaces.add(path.parent.name)
+
+    return index, namespaces, errors
+
+
+def check_payload_binding(
+    label: str,
+    instance: dict,
+    index: dict[tuple[str, int], Path],
+    namespaces: set[str],
+    validators: dict[tuple[str, int], Draft202012Validator],
+) -> list[str]:
+    """Validate an example's payload against the schema for its type."""
+    event_type = instance.get("type")
+    schema_version = instance.get("schema_version")
+    if not isinstance(event_type, str) or not isinstance(schema_version, int):
+        return []
+
+    key = (event_type, schema_version)
+    schema_path = index.get(key)
+    if schema_path is None:
+        namespace = event_type.split(".", 1)[0]
+        if namespace in namespaces:
+            return [
+                f"{label}: no payload schema for {event_type} "
+                f"version {schema_version}"
+            ]
+        return []
+
+    payload_errors = validators[key].iter_errors(instance.get("payload"))
+    return [
+        f"{label}: payload does not match {relative(schema_path)}: {error.message}"
+        for error in sorted(payload_errors, key=lambda e: e.message)
+    ]
+
+
 def validate_events(envelope) -> list[str]:
     errors: list[str] = []
     schema_paths = sorted(EVENTS_DIR.rglob("*.schema.json"))
+    schemas: dict[Path, dict] = {}
 
     for path in schema_paths:
         label = relative(path)
@@ -220,7 +298,23 @@ def validate_events(envelope) -> list[str]:
             errors.append(f"{label}: invalid JSON Schema: {type(exc).__name__}: {exc}")
             continue
 
+        expected_id = path.relative_to(EVENTS_DIR).as_posix()
+        if schema.get("$id") != expected_id:
+            errors.append(
+                f"{label}: $id must be {expected_id!r} to bind the schema "
+                f"to its event type"
+            )
+
+        schemas[path] = schema
         errors.extend(check_refs(path, schema))
+
+    index, namespaces, index_errors = payload_schema_index(schema_paths, schemas)
+    errors.extend(index_errors)
+
+    validators = {
+        key: Draft202012Validator(schemas[path], format_checker=FormatChecker())
+        for key, path in index.items()
+    }
 
     validator = Draft202012Validator(envelope, format_checker=FormatChecker())
     examples = sorted(EXAMPLES_DIR.glob("*.json"))
@@ -238,8 +332,15 @@ def validate_events(envelope) -> list[str]:
 
         if path.name.startswith("valid-"):
             valid += 1
-            for error in sorted(validator.iter_errors(instance), key=lambda e: e.message):
+            envelope_errors = list(validator.iter_errors(instance))
+            for error in sorted(envelope_errors, key=lambda e: e.message):
                 errors.append(f"{label}: expected valid, {error.message}")
+            if not envelope_errors:
+                errors.extend(
+                    check_payload_binding(
+                        label, instance, index, namespaces, validators
+                    )
+                )
         elif path.name.startswith("invalid-"):
             invalid += 1
             if not list(validator.iter_errors(instance)):
@@ -257,7 +358,8 @@ def validate_events(envelope) -> list[str]:
     status = "OK" if not errors else "FAILED"
     print(
         f"Event schemas {status}: {len(schema_paths)} schema(s), "
-        f"{valid} valid and {invalid} invalid example(s)"
+        f"{valid} valid and {invalid} invalid example(s), "
+        f"{len(index)} payload binding(s)"
     )
     return errors
 

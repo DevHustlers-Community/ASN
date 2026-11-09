@@ -35,6 +35,9 @@ CI runs the same entry point from
 | External `$ref` | a missing target file or JSON Pointer |
 | Broker `EventEnvelope` | required fields or property names drift from the shared envelope |
 | Event schemas | invalid JSON Schema |
+| Payload schema names | not `<event-type>.v<version>.schema.json` |
+| Payload schema `$id` | differs from the path relative to `contracts/events/` |
+| `valid-*.json` payloads | rejected by the schema bound to `type` and `schema_version`, or missing for a namespace that has payload schemas |
 | `valid-*.json` examples | rejected by the event envelope |
 | `invalid-*.json` examples | accepted by the event envelope |
 | Breaking OpenAPI changes | a removed path, operation, or required field without an `info.version` bump |
