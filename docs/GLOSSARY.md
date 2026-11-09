@@ -258,6 +258,12 @@ and rejects stale content using `aggregate_version`.
 SQLite encryption key, backup key material, device private keys). Keys are never
 stored in AsyncStorage, JS bundles, or logs.
 
+**KeyPackage** `[Chat]` — An MLS public bundle that lets another client add a
+device to a group. Stored in `device_key_packages` with its ciphersuite, creation
+and expiry timestamps, an optional `last_resort` flag, and `consumed_at` for
+one-time claiming. Claiming is atomic; private key material never reaches the
+server. See [ADR 0007](decisions/0007-e2ee-protocol-selection.md).
+
 **Lease / visibility timeout** `[Broker]` — The period during which a delivered
 event is reserved for one consumer and hidden from others. If the consumer does
 not acknowledge before the lease expires, the delivery becomes eligible again.
@@ -287,7 +293,9 @@ open decision.
 
 **MLS (Messaging Layer Security)** `[Chat]` — IETF RFC 9420, an asynchronous group
 key establishment protocol with forward secrecy and post-compromise security for
-groups from two to thousands. A candidate E2EE protocol; not yet selected.
+groups from two to thousands. The E2EE protocol selected by
+[ADR 0007](decisions/0007-e2ee-protocol-selection.md). The client library remains
+a separate gate; until it passes, development uses `dev-opaque-v1`.
 
 **Moderation action** `[Moderation]` — A decision requested by Moderation and
 applied by the owning service. Types include `remove_content`, `warn`, `mute`,
@@ -356,7 +364,9 @@ plaintext. Posts have visibility/status and denormalized counters.
 
 **Prekey** `[Chat]` — Public key material published by a device so others can
 start an asynchronous encrypted session. Kinds include `signed` and `one_time`.
-Only public material is stored; one-time key claiming must be atomic.
+This term and the `device_prekeys` shape belong to the Signal/Sesame fallback,
+not the selected MLS path; MLS uses **KeyPackage**. Only public material is
+stored; key claiming must be atomic.
 
 **Presence** `[Chat]` — Online/last-seen state. It is returned only when privacy
 allows it (`show_presence` and Social's `show_online_status`); it is not a
@@ -432,8 +442,10 @@ conversations proceed concurrently.
 members of a conversation (`recipient_device_id IS NULL`).
 
 **Signal / Sesame** `[Chat]` — Signal's protocol family and its Sesame algorithm
-for managing asynchronous sessions across multiple devices. A candidate E2EE
-approach; not yet selected. No custom cryptography may be invented.
+for managing asynchronous sessions across multiple devices. The documented
+fallback if the MLS client gate fails for both React Native and web; not
+selected. Adopting it requires a superseding ADR. No custom cryptography may be
+invented.
 
 **Soft delete** `[Data]` — Marking content with `deleted_at` or a status such as
 `hidden`/`removed` instead of physically removing it immediately. Physical purge
@@ -567,10 +579,11 @@ These fields are easy to mix up; they measure different things.
 Do not assume a concrete value for these; they are open decisions in
 architecture §9 and must be resolved by an ADR before code depends on them.
 
-- The real E2EE protocol and its libraries (Signal/Sesame vs MLS/RFC 9420).
+- The E2EE client library. MLS is selected in
+  [ADR 0007](decisions/0007-e2ee-protocol-selection.md); the library gate remains
+  open.
 - Web E2EE parity timing.
-- Broker transport, lease/retry defaults, retention windows, payload limits, and
-  replay authorization.
+- Broker partitioning and scaling thresholds.
 - TypeScript HTTP framework, query layer, validation, and migration tooling.
 - React Native SQLite library and its SQLCipher support.
 - Backup recovery method (recovery key, passphrase, passkey wrapping).

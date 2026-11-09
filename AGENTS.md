@@ -261,9 +261,11 @@ tests.
 These must be settled by an ADR before implementation depends on them. Full list
 in §9 of the architecture document.
 
-- E2EE protocol and libraries for React Native and web (Signal/Sesame vs MLS).
+- E2EE client library for React Native and web. MLS is selected by
+  [ADR 0007](docs/decisions/0007-e2ee-protocol-selection.md); the library gate
+  remains open.
 - Web E2EE parity timing.
-- Broker transport (HTTP polling vs persistent connection), retention, and limits.
+- Broker partitioning and scaling thresholds.
 - TypeScript HTTP framework, query layer, validation, and migration tooling.
 - React Native SQLite library, SQLCipher support, and key handling.
 - Backup recovery method (recovery key, passphrase, passkey wrapping).

@@ -57,7 +57,7 @@ assume they are reachable.
 | `chat_devices.status = pending_verification` | transition device verification state |
 | `chat_devices.device_label` | rename a device |
 | Delivery and read receipts | receipt endpoints |
-| `device_prekeys` table | not created in this slice; waits for the E2EE library gate |
+| `device_key_packages` table | not created yet; KeyPackage upload/claim operations are the next Chat contract slice (ADR 0007) |
 
 `processed_events` and `message_payloads` are internal: they are written by the
 service inside the send transaction and deliberately have no endpoint of their
