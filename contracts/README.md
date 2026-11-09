@@ -27,9 +27,10 @@ The single source of truth for communication between services and clients.
 [`scripts/contracts/validate.py`](../scripts/contracts/validate.py) validates the
 OpenAPI documents, resolves every `$ref`, checks the broker `EventEnvelope`
 against the shared envelope schema, and validates the event examples under
-[`events/examples/`](events/examples/README.md). On pull requests it also
-rejects a removed path, operation, or required field that does not bump
-`info.version`.
+[`events/examples/`](events/examples/README.md), including binding each valid
+example's `payload` to the schema named by its `type` and `schema_version`. On
+pull requests it also rejects a removed path, operation, or required field that
+does not bump `info.version`.
 
 Run it locally with the pinned tooling in
 [`scripts/contracts/`](../scripts/contracts/README.md); CI runs the same entry

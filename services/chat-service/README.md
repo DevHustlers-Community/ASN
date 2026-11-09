@@ -9,7 +9,7 @@ the Chat event payload schemas
 ([`contracts/events/chat/`](../../contracts/events/chat/)), and the
 protocol-neutral migrations below — but there are no product endpoints or
 contexts yet. Persisted envelope formats remain blocked by the E2EE decisions
-in [ADR 0007](../../docs/decisions/README.md) and
+in [ADR 0007](../../docs/decisions/README.md) and the planned
 [ADR 0009](../../docs/decisions/README.md).
 
 Two contract notes before any endpoint is implemented: every Chat request body

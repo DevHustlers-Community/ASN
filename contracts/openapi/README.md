@@ -26,9 +26,9 @@ a repeated YAML mapping key, and rejects a removed path, operation, or required
 field without an `info.version` bump on pull requests. Client generation drift
 checks are not implemented yet.
 
-**Status:** not written yet for the business services; authoring starts with
-the Social API and Chat endpoints needed by the first vertical slice. The
-event-broker contract has landed
+**Status:** the Social and Moderation API contracts are not written yet;
+authoring starts with the Social API and the endpoints needed by the first
+vertical slice. The event-broker contract has landed
 ([`event-broker-api.yaml`](event-broker-api.yaml)) with the broker paths
 decided by ADR 0008 (`/v1/...`, which intentionally differs from the `/api/v1`
 client convention: the broker is service-to-service only), and

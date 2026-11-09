@@ -45,11 +45,15 @@ with the schema version as a suffix, `<type>.v1.schema.json`. A breaking
 payload change requires a new event `type` with a `.v2` suffix per
 [`contracts/VERSIONING.md`](../VERSIONING.md) (a new file named
 `<event>.v2.schema.json`, dual-published with the old type for the deprecation
-window); it is not a swap of the file under the existing type. The payload
-schemas are not yet
-machine-bound to the envelope `type`: the validator proves every payload schema
-is a valid JSON Schema but does not yet check that a fixture or an event of a
-given `type` validates against the matching payload schema.
+window); it is not a swap of the file under the existing type.
+
+**Payload binding:** [`scripts/contracts/validate.py`](../../scripts/contracts/validate.py)
+binds payload schemas to the envelope. Each payload file must be named
+`<type>.v<version>.schema.json`, its `$id` must equal its path relative to
+`contracts/events/`, and the `payload` of every `valid-*.json` example is
+validated against the schema matching the example's `type` and
+`schema_version`. A valid example whose type uses a namespace that already has
+payload schemas (for example `chat.*`) must have a matching schema.
 
 ## Transport notes ([ADR 0008](../../docs/decisions/0008-broker-transport-and-delivery-contract.md))
 
