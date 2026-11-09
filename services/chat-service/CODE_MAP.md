@@ -51,7 +51,7 @@ allocation, membership checks, or envelope validation in a controller or channel
 | `crypto/` | Protocol-neutral envelope validation and key-rotation triggers | `devices`, `messages` |
 | `blocks/` | `chat_block_edges` projection and fail-closed checks | `accounts`, `events` |
 | `delivery/` | Channel fan-out, presence, push dispatch | `conversations`, `messages`, `devices` |
-| `events/` | Transactional outbox writer, publisher, consumers | `repo`, domain contexts |
+| `events/` | Transactional outbox writer, envelope rebuild, publisher relay, consumers | `repo`, domain contexts |
 
 Contexts are added with their first schema, query, or rule. Do not commit empty
 placeholder directories.
@@ -74,7 +74,9 @@ soft references documented as `ref: <db>.<table>.<column>`.
 | `test/asn_chat_web/` | Controller, endpoint, and channel tests |
 | `test/support/conn_case.ex` | Connection and sandbox setup |
 | `test/support/data_case.ex` | Database and sandbox setup |
-| `test/unit/`, `test/integration/`, `test/failure/` | Planned layers as contexts land |
+| `test/unit/` | Pure module tests, for example envelope rebuild |
+| `test/integration/` | Real-PostgreSQL tests, for example outbox and relay behavior |
+| `test/failure/` | Planned failure-path layer as contexts land |
 
 Integration tests use the real local PostgreSQL database. E2EE tests use fixed
 envelope vectors and never plaintext fixtures.
