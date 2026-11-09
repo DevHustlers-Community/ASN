@@ -23,6 +23,7 @@ defmodule AsnChat.DataCase do
       import Ecto
       import Ecto.Changeset
       import Ecto.Query
+      import AsnChat.ChatFixtures
       import AsnChat.DataCase
     end
   end

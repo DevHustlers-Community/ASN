@@ -7,9 +7,11 @@ to PostgreSQL. Contract slice 1 has landed — the OpenAPI contract
 ([`contracts/openapi/chat-api.yaml`](../../contracts/openapi/chat-api.yaml)),
 the Chat event payload schemas
 ([`contracts/events/chat/`](../../contracts/events/chat/)), and the
-protocol-neutral migrations below — but there are no product endpoints or
-contexts yet. Persisted envelope formats remain blocked by the E2EE decisions
-in [ADR 0007](../../docs/decisions/README.md) and the planned
+protocol-neutral migrations below. The `events` outbox/relay, the `accounts`
+projection lock, and the `devices` context are implemented, but there are no
+product endpoints yet: controllers and routes wait on the authentication decision
+in architecture §9.1. Prekey storage remains blocked by
+[ADR 0007](../../docs/decisions/README.md) and the planned
 [ADR 0009](../../docs/decisions/README.md).
 
 Two contract notes before any endpoint is implemented: every Chat request body
@@ -40,12 +42,16 @@ The OTP application is `:asn_chat`; modules are `AsnChat` and `AsnChatWeb`.
 ## Code map
 
 See [`CODE_MAP.md`](CODE_MAP.md) for every internal directory, its ownership, and
-the planned contexts.
+the status of each context.
 
 | Path | Responsibility |
 |---|---|
 | `lib/asn_chat/application.ex` | Supervision tree: telemetry, repo, PubSub, endpoint |
 | `lib/asn_chat/repo.ex` | The only Ecto boundary for `chat_db` |
+| `lib/asn_chat/accounts.ex` | `chat_users` projection access and per-user locking |
+| `lib/asn_chat/devices.ex` | Device registration, revocation, listing, and device events |
+| `lib/asn_chat/events/` | Outbox writer, wire envelope rebuild, publisher relay |
+| `lib/asn_chat/uuid_v7.ex` | UUIDv7 generation |
 | `lib/asn_chat_web.ex` | JSON controller and channel helpers |
 | `lib/asn_chat_web/endpoint.ex` | Bandit endpoint and request pipeline |
 | `lib/asn_chat_web/router.ex` | Empty `/api` scope; no routes yet |
@@ -54,20 +60,20 @@ the planned contexts.
 | `priv/repo/migrations/` | Chat-owned migrations: the `chat_db` schema tables from the architecture document (users, conversations, members, devices, messages, message payloads, processed events) plus the outbox table aligned to [ADR 0015](../../docs/decisions/0015-outbox-event-storage.md) |
 | `test/` | ExUnit tests and ConnCase/DataCase support |
 
-## Planned contexts (`lib/asn_chat/`)
+## Contexts (`lib/asn_chat/`)
 
-| Context | Purpose |
-|---|---|
-| `accounts/` | `chat_users` projections |
-| `conversations/` | Direct/community conversations, membership, privacy |
-| `messages/` | Sequence issuance, envelopes, edits, tombstones |
-| `attachments/` | Encrypted upload lifecycle |
-| `read_receipts/` | Read cursors and receipts |
-| `devices/` | Device registry and public prekeys |
-| `crypto/` | Protocol state, key rotation triggers, envelope validation helpers |
-| `blocks/` | `chat_block_edges` projection and fail-closed checks |
-| `delivery/` | Channel fan-out, push, presence |
-| `events/` | Outbox writer, publishers, consumers |
+| Context | Status | Purpose |
+|---|---|---|
+| `accounts/` | Implemented | `chat_users` projection and `FOR NO KEY UPDATE` user lock |
+| `conversations/` | Planned | Direct/community conversations, membership, privacy |
+| `messages/` | Planned | Sequence issuance, envelopes, edits, tombstones |
+| `attachments/` | Planned | Encrypted upload lifecycle |
+| `read_receipts/` | Planned | Read cursors and receipts |
+| `devices/` | Implemented | Device registry; public prekeys pending ADR 0007/0009 |
+| `crypto/` | Planned | Protocol state, key rotation triggers, envelope validation helpers |
+| `blocks/` | Planned | `chat_block_edges` projection and fail-closed checks |
+| `delivery/` | Planned | Channel fan-out, push, presence |
+| `events/` | Implemented | Outbox writer, publishers, consumers |
 
 Context directories are created when their first implementation lands. Do not add
 empty placeholder directories.
@@ -131,9 +137,12 @@ is registered in the scaffold yet.
 
 ## Tests
 
-Current coverage is the generated error-rendering test. Database-backed unit,
-integration, and failure-path tests are added with each context. Required failure
-paths are listed in [`AGENTS.md`](../../AGENTS.md#7-verification).
+Coverage now includes pure unit tests for device changesets and event envelopes,
+real-PostgreSQL integration tests for accounts and device lifecycle/outbox
+behavior, and unboxed concurrent-registration/revocation race tests under
+`test/failure/`. Remaining contexts add database-backed unit, integration, and
+failure-path tests with their first implementation. Required failure paths are
+listed in [`AGENTS.md`](../../AGENTS.md#7-verification).
 
 ## Related
 
