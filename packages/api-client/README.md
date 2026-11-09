@@ -14,4 +14,5 @@ using the chosen generator (recorded in an ADR).
   plaintext `body` field.
 - Regeneration is part of the contract change workflow, not a separate release.
 
-**Status:** not generated yet. Blocked on the first OpenAPI files.
+**Status:** not generated yet. The first OpenAPI contracts have landed; generation
+waits for the generator choice recorded in an ADR and the CI drift check.

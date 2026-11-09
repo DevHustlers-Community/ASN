@@ -7,7 +7,7 @@ Status is tracked here; completed items move to the changelog.
 
 - [x] Event broker v1 (schema, publish/fan-out, claim/lease, ack/nack/extend, dead-letter, retention, HTTP edge, metrics, telemetry)
 - [x] Broker audit remediation (crashes, retention cutoffs, audit atomicity, DB-time lease checks, indexes, contract, docs)
-- [x] Chat service: accounts/conversations/messages + outbox + broker relay
+- [x] Chat service: scaffold + contract slice 1 (OpenAPI, event schemas, migrations) + outbox + broker relay
 - [x] Web client scaffolding + design system
 - [x] Local Swagger UI viewer + endpoint-doc rule
 
