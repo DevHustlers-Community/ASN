@@ -2,12 +2,13 @@
 
 Tests that no single service can own alone.
 
-| Folder | Contents |
-|---|---|
-| `integration/` | Real service-to-service flows: Social -> broker -> Chat, Chat -> broker -> Social |
-| `contract/` | OpenAPI and event schema validation, consumer/provider compatibility |
-| `end-to-end/` | Web, mobile, and admin user journeys against a running stack |
-| `fixtures/` | Shared seed data and event payload examples |
+| Folder | Contents | Status |
+|---|---|---|
+| `e2e/` | Full event loop against live processes: Chat outbox → relay → broker → claim → ack → metrics | Available: [`e2e/broker-relay.sh`](e2e/broker-relay.sh) |
+| `integration/` | Real service-to-service flows: Social → broker → Chat, Chat → broker → Social | Planned |
+| `contract/` | OpenAPI and event schema validation, consumer/provider compatibility | Planned; schema validation currently runs from `scripts/contracts/validate.py` |
+| `end-to-end/` | Web, mobile, and admin user journeys against a running stack | Planned |
+| `fixtures/` | Shared seed data and event payload examples | Planned |
 
 **Rules:**
 
@@ -29,4 +30,5 @@ claims and acknowledges the delivery, and checks the metrics trail. It resets
 its own state and picks a random port, so reruns are safe. Prerequisites:
 compose PostgreSQL up and both services' dependencies fetched.
 
-**Status:** not written yet; starts after the first vertical slice exists.
+**Status:** the happy path is implemented and runs in CI. The failure-path cases
+listed above are still to be added to this folder.

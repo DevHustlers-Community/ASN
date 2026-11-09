@@ -40,7 +40,7 @@ The following decisions define the current target architecture. They change only
 9. **Conversation ordering:** message sequence issuance is serialized per conversation through a transaction that updates that conversation's row. Different conversations are written concurrently. Do not introduce a global chat writer unless measurements demonstrate the need and a separate ADR justifies it.
 10. **No central global business service:** no service through which every request or write must pass. A reverse proxy may route and terminate TLS but must not own business data.
 11. **End-to-end encryption (E2EE)** is the target for every chat conversation, including direct chats and community channels. The server stores and routes encrypted payloads but does not possess message-decryption keys.
-12. **Cryptographic protocol is not yet selected.** Do not invent a protocol or ship custom cryptography. Persisted schema stays protocol-neutral until supported React Native and web implementations have been evaluated (Signal/Sesame vs MLS/RFC 9420).
+12. **The E2EE protocol is selected; the client library is not.** [ADR 0007](../decisions/0007-e2ee-protocol-selection.md) selects MLS (RFC 9420) as the chat protocol. Signal/Sesame is a documented fallback only, and adopting it requires a superseding ADR. Do not invent a protocol or ship custom cryptography. The React Native and web client library is a separate gate in ADR 0007; until it passes, development uses `dev-opaque-v1` with the same envelope shape.
 13. **Opaque envelope contract from day one.** Clients send an opaque ciphertext envelope. There is no `body` column and no "temporary plaintext" column, DTO, event field, log field, or push field — in development or production. Development builds use the same envelope shape with a clearly marked `dev-opaque-v1` protocol so the server contract never has to change when real E2EE lands.
 14. **Client platforms:** React + TypeScript for web and admin, React Native + TypeScript for mobile. Shared types are generated from `contracts/`; UI components are not shared across web and native.
 15. **Local mobile storage:** each React Native client keeps a local SQLite database for conversation history, the outgoing queue, sync cursors, and local state. Local plaintext lives only inside the encrypted database; the key is held in the OS secure storage (Keychain/Keystore), never in AsyncStorage. SQLite WAL is a client-side persistence detail, not a server source of truth.
@@ -61,7 +61,7 @@ ASN is composed of three business services with clear data ownership, plus a cus
 | Service / component | Runtime and interface | Owned database | Primary responsibilities |
 |---|---|---|---|
 | Social API | Bun + TypeScript; REST | `social_db` | Accounts, profiles, follows, blocks, posts, articles, reactions, feed inputs, activity calendar, communities, roles/channels, notification state, plan flags, account deletion workflow |
-| Chat service | Elixir + Phoenix + Ecto; REST + WebSockets/Channels | `chat_db` | Friendships, chat privacy, direct/community conversations, encrypted message envelopes, public device keys/prekeys, upload tracking, receipts, push devices, chat streaks |
+| Chat service | Elixir + Phoenix + Ecto; REST + WebSockets/Channels | `chat_db` | Friendships, chat privacy, direct/community conversations, encrypted message envelopes, public device identity and MLS KeyPackage material, upload tracking, receipts, push devices, chat streaks |
 | Moderation service | Bun + TypeScript; REST | `moderation_db` | Platform reports/cases, user-submitted evidence snapshots, moderation actions, appeals, strikes, staff audit log |
 | Event broker | Elixir/OTP + Ecto; publish/consume API, transport selected by ADR 0008 | `broker_db` | Durable event log, subscriptions, delivery state, acknowledgements, retries, dead letters, retention, replay |
 | Object storage | S3-compatible storage / Cloudflare R2 as selected | None | Public media and private/encrypted media; services store object keys, never permanent URLs |
@@ -312,7 +312,7 @@ Elixir/Phoenix services follow normal OTP release and supervision practices; no 
 | Cross-row rules | `CHECK` constraints cannot read other tables. Use a transaction/service invariant or a carefully designed deferred constraint trigger where database enforcement is required. |
 | E2EE payloads | Store ciphertext as `bytea` (or a rigorously documented binary envelope encoding). Never store the decrypted body in `chat_db`, logs, traces, event payloads, analytics, or push payloads. |
 | Envelope from day one | Every client and test uses the final envelope shape. `dev-opaque-v1` is a protocol identifier, not a plaintext bypass. |
-| Keys | Private identity/session/prekey/backup keys never enter server tables. Only public protocol material may be stored server-side. |
+| Keys | Private identity/session/KeyPackage/backup keys never enter server tables. Only public protocol material may be stored server-side. |
 | Backups | Never upload a live SQLite main file without a consistent snapshot; WAL data lives in `-wal`. Use `VACUUM INTO` (or the SQLite backup API), encrypt locally, then upload. |
 | Secret handling | Mobile database keys and backup keys live in OS secure storage (Keychain/Keystore). Tokens, keys, and recovery secrets are never committed, logged, or placed in analytics. |
 
@@ -403,7 +403,7 @@ A direct chat or a community chat channel.
 | `title` | text | | Optional display projection for community chat. |
 | `last_seq` | bigint | NOT NULL DEFAULT 0 | Monotonic sequence issued by transactionally updating this row. |
 | `last_message_at` | timestamptz | | Inbox ordering only; not a complete offline sync cursor. |
-| `crypto_protocol` | text | NOT NULL | Protocol identifier; e.g. `dev-opaque-v1` until the real protocol is selected, then its implementation/version name. |
+| `crypto_protocol` | text | NOT NULL | Protocol identifier. Production uses `mls-1.0`; development uses `dev-opaque-v1` until the ADR 0007 client library gate passes. |
 | `crypto_protocol_version` | integer | NOT NULL DEFAULT 1 | Envelope/protocol version understood by clients. |
 | `crypto_state_version` | bigint | NOT NULL DEFAULT 0 | Monotonic version incremented on membership/device/key-state changes where applicable. |
 | `created_at` | timestamptz | NOT NULL | |
@@ -457,22 +457,23 @@ One cryptographic identity per installed client/device. The server stores public
 
 Indexes: `(user_id, status)`. Public key changes are identity changes, never silent overwrites. Clients need a trust-change/verification UX.
 
-### 3.8 `device_prekeys`
+### 3.8 `device_key_packages`
 
-Public prekey material uploaded by devices and consumed by clients to establish asynchronous sessions. Adapt to the selected protocol/library; never store private prekey material.
+MLS KeyPackages published by devices so other clients can add them to a group.
+[ADR 0007](../decisions/0007-e2ee-protocol-selection.md) selects MLS (RFC 9420)
+and replaces the earlier Signal-shaped `device_prekeys` design with this table;
+`device_prekeys` is not part of the MLS path.
 
-| Column | Type | Constraints | Description |
-|---|---|---|---|
-| `device_id` | uuid | FK → `chat_devices.id`, NOT NULL | |
-| `key_id` | bigint | NOT NULL | Protocol-scoped key ID. |
-| `kind` | text | NOT NULL | `signed`, `one_time`, or a protocol-approved value. |
-| `public_key` | bytea | NOT NULL | Public key. |
-| `signature` | bytea | | Required for signed prekeys as dictated by the protocol. |
-| `created_at` | timestamptz | NOT NULL | |
-| `expires_at` | timestamptz | | Optional expiry. |
-| `consumed_at` | timestamptz | | Set when a one-time prekey is claimed. |
+Each row belongs to a `chat_devices` record and stores the opaque KeyPackage
+bundle, its MLS ciphersuite, creation and expiry timestamps, an optional
+`last_resort` flag, and a `consumed_at` timestamp for one-time claiming. Only
+public protocol material is stored; private keys never reach the server. Claiming
+is atomic so a KeyPackage is never handed to two initiators.
 
-Primary key: `(device_id, key_id)`. Index unused one-time prekeys: `(device_id, kind, created_at) WHERE consumed_at IS NULL`. One-time key claiming must be atomic so a key is never assigned to two session initiations. Store protocol name/version explicitly if versions may coexist.
+Column types, keys, and indexes are finalized with the KeyPackage contract and
+migration. Do not fix them here ahead of that change. The client library gate in
+ADR 0007 remains open; until it passes, development uses `dev-opaque-v1` with the
+same envelope shape.
 
 ### 3.9 `messages`
 
@@ -975,7 +976,7 @@ These do not block schema work, but must be finalized before protocol implementa
 3. **Broker transport:** HTTP polling/long-polling vs a persistent connection; lease renewal, max in-flight deliveries, retry/backoff defaults, dead-letter retention, event log retention, payload size limit, and replay authorization. Settled in [ADR 0008](../decisions/0008-broker-transport-and-delivery-contract.md) (accepted): HTTP claim-based pull with long-polling.
 4. **Broker partitioning and scaling:** single-node correctness first; define the measured thresholds that would justify horizontal scaling or partitioning.
 5. **Critical authorization propagation:** explicit completion semantics for blocks, suspensions, bans, community removals, and other security-sensitive state changes. Projection freshness and event lag must not silently weaken enforcement.
-6. **E2EE protocol and supported libraries:** compare maintained implementations for React Native (Android/iOS) and React web; evaluate licensing, update cadence, test vectors, multi-device behavior, group chat behavior, and post-quantum roadmap. No custom protocol.
+6. **E2EE client library gate:** [ADR 0007](../decisions/0007-e2ee-protocol-selection.md) selects MLS (RFC 9420) and specifies the library pass criteria. The remaining decision is which maintained library satisfies that gate for React Native (Android/iOS) and React web, including licensing, update cadence, test vectors, multi-device behavior, group chat behavior, and post-quantum roadmap. No custom protocol. Until the gate passes, development uses `dev-opaque-v1`.
 7. **Web E2EE parity:** whether web ships E2EE at the same time as mobile, or with a documented limitation. No silent plaintext fallback.
 8. **Device identity verification:** how users see/verify identity-key changes and how revocation propagates.
 9. **Group key rotation:** how member removal/ban rotates group sending keys, how new members are added, and whether pre-join history is delivered. Default in this draft: no pre-join history. The who-triggers-the-Remove-Commit and block/ban enforcement-surface parts are settled in [ADR 0014](../decisions/0014-community-commit-authorization.md) (proposed); pre-join history and how new members receive keys remain open.
@@ -1018,14 +1019,14 @@ These do not block schema work, but must be finalized before protocol implementa
 The complete product scope remains. This order reduces integration risk:
 
 1. Repository skeleton, CI, local environment, service health checks, and the OpenAPI/event contract conventions. Verify the Bun toolchain and the Elixir release pipeline early.
-2. Lock the E2EE protocol/library direction (even if implementation comes later) and make every contract accept opaque envelopes. Create cross-client test vectors when the protocol is chosen.
-3. Implement chat database constraints, opaque envelope storage, per-device identity/public prekey registry, conversation sequencing, idempotent send, receipts, and offline sync.
+2. Apply [ADR 0007](../decisions/0007-e2ee-protocol-selection.md): MLS is selected, and the client library gate remains open. Make every contract accept opaque envelopes. Create cross-client test vectors when a library passes the gate.
+3. Implement chat database constraints, opaque envelope storage, per-device identity and public KeyPackage registry, conversation sequencing, idempotent send, receipts, and offline sync.
 4. Implement the React Native local SQLite schema: encryption/key storage decision, WAL-aware `VACUUM INTO` snapshot, and manual encrypted Google Drive backup/restore end to end.
 5. Implement the broker proof of concept: publish idempotency, durable storage, subscriptions, visibility-timeout leases, ack/nack, retries, dead letters, replay, and crash recovery. Then integrate one producer's outbox and one consumer.
 6. Integrate community membership/key rotation and device revocation.
 7. Implement user-submitted E2EE report evidence and account-deletion holds with audited review.
 8. Implement/reconcile feed projections, articles, activity/streak logic, plans/feature flags, and community reports using versioned events.
-9. Run failure tests: duplicate/out-of-order events, broker restart during in-flight leases, database disconnects, restart during backup/restore, one-time prekey races, offline recipients, revoked devices, membership removal, failed uploads, and deletion during an active report.
+9. Run failure tests: duplicate/out-of-order events, broker restart during in-flight leases, database disconnects, restart during backup/restore, KeyPackage claim races, offline recipients, revoked devices, membership removal, failed uploads, and deletion during an active report.
 
 **This document is a design specification. Generate migrations only after the open decisions affecting persisted protocol formats and the broker contract are resolved.**
 

@@ -10,9 +10,10 @@ the Chat event payload schemas
 protocol-neutral migrations below. The `events` outbox/relay, the `accounts`
 projection lock, and the `devices` context are implemented, but there are no
 product endpoints yet: controllers and routes wait on the authentication decision
-in architecture §9.1. Prekey storage remains blocked by
-[ADR 0007](../../docs/decisions/README.md) and the planned
-[ADR 0009](../../docs/decisions/README.md).
+in architecture §9.1. MLS is selected by
+[ADR 0007](../../docs/decisions/0007-e2ee-protocol-selection.md); MLS KeyPackage
+storage (`device_key_packages`) and its contract are the next `devices` slice.
+The client library gate in ADR 0007 remains open.
 
 Two contract notes before any endpoint is implemented: every Chat request body
 limit is 256 KiB (aligned with the broker's ADR 0008 limit), and Chat
@@ -21,8 +22,8 @@ scheme name and 401/403 semantics are stable, the credential format is not.
 
 **Owns:** friendships, chat privacy settings, direct and community
 conversations, conversation membership, opaque message envelopes, public device
-identity/prekey material, media upload tracking, receipts, push devices, and chat
-streaks.
+identity and MLS KeyPackage material, media upload tracking, receipts, push
+devices, and chat streaks.
 
 **Does not own:** accounts/profiles (projected from Social), platform blocks
 (projected from Social), moderation cases, or the event log.
@@ -69,7 +70,7 @@ the status of each context.
 | `messages/` | Planned | Sequence issuance, envelopes, edits, tombstones |
 | `attachments/` | Planned | Encrypted upload lifecycle |
 | `read_receipts/` | Planned | Read cursors and receipts |
-| `devices/` | Implemented | Device registry; public prekeys pending ADR 0007/0009 |
+| `devices/` | Implemented | Device registry; MLS KeyPackage storage (`device_key_packages`) is the next slice (ADR 0007) |
 | `crypto/` | Planned | Protocol state, key rotation triggers, envelope validation helpers |
 | `blocks/` | Planned | `chat_block_edges` projection and fail-closed checks |
 | `delivery/` | Planned | Channel fan-out, push, presence |

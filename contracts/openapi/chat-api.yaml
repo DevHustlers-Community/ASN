@@ -722,8 +722,9 @@ components:
         crypto_protocol:
           type: string
           description: >
-            Envelope/protocol identifier understood by clients, e.g.
-            `dev-opaque-v1` until the real protocol (ADR 0007) is selected.
+            Envelope/protocol identifier understood by clients. Production uses
+            `mls-1.0`; development uses `dev-opaque-v1` until the ADR 0007
+            client library gate passes.
         crypto_protocol_version: { type: integer }
         created_at: { type: string, format: date-time }
         viewer:

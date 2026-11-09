@@ -47,7 +47,7 @@ allocation, membership checks, or envelope validation in a controller or channel
 | `messages/` | Planned | Envelope persistence, per-conversation sequence, edits, tombstones | `conversations`, `devices`, `crypto`, `events` |
 | `attachments/` | Planned | Encrypted upload lifecycle and object keys | `conversations`, `messages`, `events` |
 | `read_receipts/` | Planned | Read cursors and receipt state | `conversations`, `messages` |
-| `devices/` | Implemented | Device registry and public prekey material (prekeys pending ADR 0007/0009) | `accounts`, `events` |
+| `devices/` | Implemented | Device registry; MLS KeyPackage storage (`device_key_packages`) is the next slice (ADR 0007) | `accounts`, `events` |
 | `crypto/` | Planned | Protocol-neutral envelope validation and key-rotation triggers | `devices`, `messages` |
 | `blocks/` | Planned | `chat_block_edges` projection and fail-closed checks | `accounts`, `events` |
 | `delivery/` | Planned | Channel fan-out, presence, push dispatch | `conversations`, `messages`, `devices` |

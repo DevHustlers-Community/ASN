@@ -10,8 +10,11 @@ and lease semantics, ack/nack/extend with backoff, the lease reaper,
 dead-letter replay/skip with an audited admin trail, dependency-aware
 retention, the HTTP edge with scoped bearer credentials
 (`contracts/openapi/event-broker-api.yaml`), and telemetry emission. The
-first producer (chat outbox relay) is wired on the chat side. Remaining:
-metrics exposition and the cross-service e2e harness.
+first producer (chat outbox relay) is wired on the chat side. Prometheus metrics
+are exposed on `/metrics`, and the cross-service e2e harness runs the chat
+outbox → broker → claim → ack loop. Remaining: the failure-path e2e cases
+(duplicate, out-of-order, broker restart, consumer lag) and the partitioning and
+scaling thresholds in architecture §9.4.
 
 **Owns:** the durable event log, subscription definitions, delivery attempts and
 leases, acknowledgements, retry state, dead letters, and retention.
