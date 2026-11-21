@@ -2,23 +2,32 @@
 
 Elixir + Phoenix + Ecto service that owns `chat_db`.
 
-**Status:** scaffolded API-only service. The service compiles, boots, and connects
-to PostgreSQL. Contract slice 1 has landed — the OpenAPI contract
+**Status:** API-only service with authentication and device endpoints
+implemented. The service compiles, boots, and connects to PostgreSQL. Contract
+slice 1 has landed — the OpenAPI contract
 ([`contracts/openapi/chat-api.yaml`](../../contracts/openapi/chat-api.yaml)),
 the Chat event payload schemas
 ([`contracts/events/chat/`](../../contracts/events/chat/)), and the
-protocol-neutral migrations below. The `events` outbox/relay, the `accounts`
-projection lock, and the `devices` context are implemented, but there are no
-product endpoints yet: controllers and routes wait on the authentication decision
-in architecture §9.1. MLS is selected by
-[ADR 0007](../../docs/decisions/0007-e2ee-protocol-selection.md); MLS KeyPackage
-storage (`device_key_packages`) and its contract are the next `devices` slice.
-The client library gate in ADR 0007 remains open.
+protocol-neutral migrations below. Implemented: the `events` outbox/relay, the
+`accounts` projection lock, the `devices` context, REST authentication per
+[ADR 0016](../../docs/decisions/0016-rest-authentication-and-request-policy.md),
+and the device and KeyPackage operations (`GET /api/v1/devices`,
+`POST /api/v1/devices`, `POST /api/v1/devices/:device_id/revoke`,
+`POST /api/v1/devices/:device_id/key-packages`, and
+`GET /api/v1/devices/:device_id/key-packages`).
+Conversations, messages, and read cursors remain contract-only; their contexts
+are the next Chat slices. MLS is selected by
+[ADR 0007](../../docs/decisions/0007-e2ee-protocol-selection.md); opaque
+KeyPackage upload is implemented per
+[ADR 0017](../../docs/decisions/0017-keypackage-storage-before-library-gate.md).
+Atomic claim is deferred until `blocks/` and rate limiting land, and the client
+library gate in ADR 0007 remains open.
 
-Two contract notes before any endpoint is implemented: every Chat request body
-limit is 256 KiB (aligned with the broker's ADR 0008 limit), and Chat
-authentication is provisional pending architecture §9.1 — the `chatBearer`
-scheme name and 401/403 semantics are stable, the credential format is not.
+Every Chat request body limit is 256 KiB (aligned with the broker's ADR 0008
+limit). Bearer tokens are Auth0 JWTs validated against the issuer JWKS with the
+namespaced `user_id` claim; every authenticated request performs the
+authoritative account-status and session-revocation check against Social and
+fails closed with `503 authorization_unavailable` when Social is unreachable.
 
 **Owns:** friendships, chat privacy settings, direct and community
 conversations, conversation membership, opaque message envelopes, public device
@@ -52,10 +61,14 @@ the status of each context.
 | `lib/asn_chat/accounts.ex` | `chat_users` projection access and per-user locking |
 | `lib/asn_chat/devices.ex` | Device registration, revocation, listing, and device events |
 | `lib/asn_chat/events/` | Outbox writer, wire envelope rebuild, publisher relay |
+| `lib/asn_chat/auth/` | JWT verification (`token.ex`, `jwks.ex`) and the development key (`dev_keys.ex`) |
+| `lib/asn_chat/authorization/` | Authoritative account-status check: `dev_adapter.ex` and the fail-closed `social_client.ex` |
 | `lib/asn_chat/uuid_v7.ex` | UUIDv7 generation |
 | `lib/asn_chat_web.ex` | JSON controller and channel helpers |
-| `lib/asn_chat_web/endpoint.ex` | Bandit endpoint and request pipeline |
-| `lib/asn_chat_web/router.ex` | Empty `/api` scope; no routes yet |
+| `lib/asn_chat_web/endpoint.ex` | Bandit endpoint, body limit, and request pipeline |
+| `lib/asn_chat_web/router.ex` | `/api/v1` scopes: authenticated reads and device operations |
+| `lib/asn_chat_web/plugs/authenticate.ex` | Bearer authentication, scopes, and per-request authorization check |
+| `lib/asn_chat_web/problem.ex` | RFC 9457 Problem Details rendering |
 | `lib/asn_chat_web/telemetry.ex` | Endpoint telemetry |
 | `config/` | Compile-time configuration plus dev/test/prod/runtime split |
 | `priv/repo/migrations/` | Chat-owned migrations: the `chat_db` schema tables from the architecture document (users, conversations, members, devices, messages, message payloads, processed events) plus the outbox table aligned to [ADR 0015](../../docs/decisions/0015-outbox-event-storage.md) |
@@ -70,7 +83,7 @@ the status of each context.
 | `messages/` | Planned | Sequence issuance, envelopes, edits, tombstones |
 | `attachments/` | Planned | Encrypted upload lifecycle |
 | `read_receipts/` | Planned | Read cursors and receipts |
-| `devices/` | Implemented | Device registry; MLS KeyPackage storage (`device_key_packages`) is the next slice (ADR 0007) |
+| `devices/` | Implemented | Device registry and opaque KeyPackage upload/listing (`device_key_packages`, ADR 0017); atomic claim deferred |
 | `crypto/` | Planned | Protocol state, key rotation triggers, envelope validation helpers |
 | `blocks/` | Planned | `chat_block_edges` projection and fail-closed checks |
 | `delivery/` | Planned | Channel fan-out, push, presence |
@@ -93,8 +106,28 @@ mix ecto.migrate
 mix phx.server
 ```
 
-The API listens on `http://localhost:4002` but has no routes yet. Run the
-verification loop with:
+The API listens on `http://localhost:4002`. Device routes require a bearer token;
+in development, mint one with the generated local key:
+
+```bash
+mix asn_chat.dev_token --user <chat_users.id> [--ttl 900]
+```
+
+The development adapter resolves the token's user against the `chat_users`
+projection. `mix ecto.setup` seeds one development user in the `dev`
+environment (`0190f1e2-6d7e-7f80-b192-3d4e5f607182`); the seed is skipped in
+other environments. The generated key file lives under `priv/dev/` and is
+gitignored.
+
+| Operation | Scope | Contract |
+|---|---|---|
+| `GET /api/v1/devices` | `chat:read` | `listDevices` |
+| `POST /api/v1/devices` | `chat:devices` | `registerDevice` |
+| `POST /api/v1/devices/:device_id/revoke` | `chat:devices` | `revokeDevice` |
+| `POST /api/v1/devices/:device_id/key-packages` | `chat:devices` | `uploadKeyPackage` |
+| `GET /api/v1/devices/:device_id/key-packages` | `chat:read` | `listKeyPackages` |
+
+Run the verification loop with:
 
 ```bash
 mix format --check-formatted
@@ -114,6 +147,13 @@ and migrates `chat_db_test` before running ExUnit.
 | `CHAT_SERVICE_PORT` | all | HTTP port, default `4002` |
 | `SECRET_KEY_BASE` | prod | Required in prod; dev/test use explicit non-production placeholders |
 | `PHX_HOST` | prod | Public host for URL generation |
+| `ASN_AUTH_ISSUER` | all | Expected token `iss`; dev default is the `asn.example` placeholder |
+| `ASN_AUTH_AUDIENCE` | all | Expected token `aud` for this service |
+| `ASN_AUTH_USER_ID_CLAIM` | all | Namespaced claim carrying `social_db.users.id` |
+| `ASN_AUTH_JWKS_URL` | prod | Issuer JWKS endpoint; a missing value fails closed |
+| `ASN_AUTHORIZATION_ADAPTER` | dev, test | `dev` selects the local adapter; production always runs `SocialClient` and fails at boot if `dev` is requested |
+| `SOCIAL_INTERNAL_URL` | prod | Base URL for Social's internal authorization endpoint |
+| `ASN_M2M_TOKEN` | prod | Short-lived Auth0 M2M token for the Social authorization call |
 
 The local roles and database names are created by
 [`infrastructure/postgres/init/`](../../infrastructure/postgres/init/). Never
@@ -138,9 +178,11 @@ is registered in the scaffold yet.
 
 ## Tests
 
-Coverage now includes pure unit tests for device changesets and event envelopes,
-real-PostgreSQL integration tests for accounts and device lifecycle/outbox
-behavior, and unboxed concurrent-registration/revocation race tests under
+Coverage now includes pure unit tests for device changesets, event envelopes, and
+JWT validation; real-PostgreSQL integration tests for accounts, device
+lifecycle/outbox behavior, and the authenticated device API (401/403/503,
+idempotent registration and revocation, ownership isolation, and the 256 KiB
+body limit); and unboxed concurrent-registration/revocation race tests under
 `test/failure/`. Remaining contexts add database-backed unit, integration, and
 failure-path tests with their first implementation. Required failure paths are
 listed in [`AGENTS.md`](../../AGENTS.md#7-verification).

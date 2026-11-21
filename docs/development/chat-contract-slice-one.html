@@ -260,6 +260,15 @@
 </head>
 <body>
 
+<div class="callout warn" style="margin: 10mm 14mm 0;">
+  <strong>Frozen snapshot — Chat contract slice one (2026-11-06).</strong>
+  This document is a historical reference and does not reflect the current Chat
+  contract, endpoint count, or database state. The source of truth is
+  <code>contracts/openapi/chat-api.yaml</code> and
+  <code>docs/architecture/architecture-and-schema.md</code>; later slices are
+  recorded under <code>docs/changelog/</code>.
+</div>
+
 <div class="running-footer">
   <span>ASN — Chat Contract Slice One</span>
   <span>Protocol-neutral reference · Opaque envelopes only</span>
@@ -292,10 +301,12 @@
   </div>
 
   <div class="cover-note">
-    <strong>Contract-first order.</strong> Endpoints are not implemented in this
-    slice. The contract pins the surface — paths, status codes, idempotency,
-    pagination, error codes — so implementation, clients, and tests converge on one
-    shape. Source of truth stays in <code>contracts/openapi/chat-api.yaml</code>,
+    <strong>Contract-first order.</strong> The contract pinned the surface —
+    paths, status codes, idempotency, pagination, error codes — before endpoint
+    code. Authentication and the three device operations are now implemented
+    ([ADR 0016](../decisions/0016-rest-authentication-and-request-policy.md));
+    conversation, message, and read-cursor operations remain contract-only.
+    Source of truth stays in <code>contracts/openapi/chat-api.yaml</code>,
     <code>contracts/events/chat/</code>, and
     <code>docs/architecture/architecture-and-schema.md</code>; this document is a
     read-only summary of those files.
@@ -345,7 +356,7 @@
     <div class="card amber">
       <h5>Deferred <span class="tag out">excluded</span></h5>
       <ul>
-        <li>Controllers, contexts, routes, and channels — no endpoint is implemented yet.</li>
+        <li>Controllers, contexts, routes, and channels — conversation, message, and read-cursor endpoints are not implemented yet; authentication and devices are.</li>
         <li>Attachments, message receipts, reactions, edits, and deletions.</li>
         <li>Prekeys, KeyPackages, control messages, and commit authorization (ADR 0014 is still <em>proposed</em>).</li>
         <li>Friendship, privacy, and block projections — owned by a later Social-integration slice.</li>
@@ -366,7 +377,7 @@
 <section class="section page-break">
   <div class="section-head"><span class="num">2</span><h3>REST API surface</h3></div>
   <p class="lead">Base path <code>/api/v1</code>, plural resources, bearer security
-  (provisional pending architecture §9.1). Every conversation-scoped read answers
+  (Auth0 JWT per <a href="../decisions/0016-rest-authentication-and-request-policy.md">ADR 0016</a>). Every conversation-scoped read answers
   <code>404</code> for a non-member so the existence of a conversation never leaks.</p>
 
   <table>
@@ -456,7 +467,7 @@
       <code>conflict</code>, <code>invalid_request</code>, <code>unprocessable</code>,
       <code>payload_too_large</code>, <code>rate_limited</code>,
       <code>identity_key_conflict</code>, <code>duplicate_client_message_id</code>,
-      <code>service_unavailable</code>.</p>
+      <code>service_unavailable</code>, <code>internal_error</code>.</p>
     </div>
     <div class="card">
       <h5>Opaque payload encoding</h5>
@@ -881,9 +892,9 @@ Result: 6 passed</pre>
       <tr><td>Validator does not bind payload schemas to event types</td>
         <td>A payload schema can be wrong and still pass CI; fixtures are validated against the envelope only.</td>
         <td>Tooling follow-up in <code>scripts/contracts/validate.py</code>.</td></tr>
-      <tr><td>Authentication strategy is provisional</td>
-        <td>Scheme name and <code>401</code>/<code>403</code> semantics are stable; the credential format is not.</td>
-        <td>Architecture §9.1 decision, then a contract description update.</td></tr>
+      <tr><td>Authentication strategy was provisional</td>
+        <td>Resolved by <a href="../decisions/0016-rest-authentication-and-request-policy.md">ADR 0016</a>: Auth0 JWT access tokens, a namespaced <code>user_id</code> claim, per-service audiences, Auth0 M2M tokens, and an authoritative per-request check against Social.</td>
+        <td>Implemented in the Chat service for the device operations; conversation and message endpoints follow the same pipeline.</td></tr>
       <tr><td>ADR 0014 is still <em>proposed</em></td>
         <td>Commit authorization and the post-ban Remove Commit workflow are undecided.</td>
         <td>Accept the ADR before any control-message endpoint or schema work.</td></tr>
