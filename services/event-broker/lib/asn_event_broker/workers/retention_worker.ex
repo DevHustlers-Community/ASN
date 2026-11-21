@@ -3,7 +3,7 @@ defmodule AsnEventBroker.Workers.RetentionWorker do
   Schedules the dependency-aware retention purge (ADR 0008 §8). Purge
   frequency is `:retention_interval_ms` in the `:retention` config.
 
-  The logic lives in `Retention.purge/1` so tests call it directly; the
+  The logic lives in `Retention.purge/1` and `Retention.purge/2` so tests call it directly; the
   GenServer is only the scheduler and is disabled under the test sandbox.
   """
 
