@@ -40,6 +40,8 @@ Every significant, hard-to-reverse decision gets one numbered ADR.
 | [0012](0012-frontend-design-system-and-theming.md) | Frontend design system and theming | proposed |
 | [0014](0014-community-commit-authorization.md) | Community commit authorization and post-block removal | proposed |
 | [0015](0015-outbox-event-storage.md) | Outbox event storage columns | accepted |
+| [0016](0016-rest-authentication-and-request-policy.md) | REST authentication and request policy | accepted |
+| [0017](0017-keypackage-storage-before-library-gate.md) | KeyPackage storage before the client library gate | accepted |
 
 **Planned ADRs:**
 
@@ -54,8 +56,8 @@ Every significant, hard-to-reverse decision gets one numbered ADR.
 | 0009 | Opaque envelope contract from day one |
 | 0010 | Web E2EE parity policy |
 
-**Status:** 0007, 0008, 0011 and 0015 are accepted. 0012 and 0014 are proposed.
-0001-0006 are
-effectively settled by the architecture document and should be recorded next.
-0009 and 0010 remain open.
+**Status:** 0007, 0008, 0011, 0015, 0016 and 0017 are accepted. 0012 and 0014
+are proposed. 0001-0006 are effectively settled by the architecture document
+and should be recorded next. 0009 and 0010 remain open. ADR 0017 amends only the
+`device_key_packages` row of ADR 0007; its MLS selection stays accepted.
 

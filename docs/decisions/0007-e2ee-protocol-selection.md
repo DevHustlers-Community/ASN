@@ -3,6 +3,7 @@
 - Status: accepted
 - Date: 2026-11-05
 - Supersedes: -
+- Amended by: 0017 (device_key_packages storage only; protocol selection unchanged)
 
 ## Context
 
@@ -358,7 +359,7 @@ following hold:
 | `message_payloads` | No structural change; stores opaque MLS bytes. | No. |
 | `chat_devices` | `identity_key_public` carries the MLS signature public key; `registration_id` is unused for MLS and stays nullable. `identity_key_fingerprint` is the client-derived verification fingerprint. | No structural change; semantics change. |
 | `device_prekeys` | Not used for MLS. Keep the table out of the MLS path. | No; do not migrate it for MLS. |
-| `device_key_packages` | New table: `id`, `device_id`, `ciphersuite`, `key_package` (bytea), `last_resort`, `created_at`, `expires_at`, `consumed_at`. Partial index for unconsumed packages; atomic claim. | Yes; add after the library gate confirms the KeyPackage shape. |
+| `device_key_packages` | New table: `id`, `device_id`, `ciphersuite`, `key_package` (bytea), `last_resort`, `created_at`, `expires_at`, `consumed_at`. Partial index for unconsumed packages; atomic claim. | Amended by [ADR 0017](0017-keypackage-storage-before-library-gate.md): upload-only storage may land before the gate; claim stays gated on `blocks/` and rate limiting. |
 
 The `messages.crypto_epoch` column is the only structural change to an existing
 planned table. It is nullable and only populated for `payload_kind = 'control'`,
