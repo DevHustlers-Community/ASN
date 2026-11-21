@@ -42,7 +42,7 @@ devices, and chat streaks.
 | Component | Baseline |
 |---|---|
 | Elixir / OTP | 1.20.4 / 29.1.2, pinned in [`.tool-versions`](../../.tool-versions) |
-| Phoenix | 1.8.16, API-only (`--no-html`, `--no-assets`, `--no-live`) |
+| Phoenix | 1.8.17, API-only (`--no-html`, `--no-assets`, `--no-live`) |
 | HTTP adapter | Bandit 1.13.1 |
 | Persistence | Ecto 3.14 / Ecto SQL 3.14 / Postgrex 0.22 |
 | Database | PostgreSQL 18.6 locally via [`compose.yaml`](../../compose.yaml) |

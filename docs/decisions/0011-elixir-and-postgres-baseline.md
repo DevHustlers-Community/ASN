@@ -18,9 +18,10 @@ scaffold.
 ## Decision
 
 - Pin Elixir 1.20.4 on OTP 29.1.2 in `.tool-versions`.
-- Use Phoenix 1.8.16 for the Chat service, API-only: no HTML, assets, LiveView,
-  dashboard, gettext, or mailer. Phoenix Channels remain the live-delivery
-  mechanism when that work starts.
+- Use Phoenix 1.8.x for the Chat service, API-only: no HTML, assets, LiveView,
+  dashboard, gettext, or mailer. The original baseline was 1.8.16; the lockfile
+  now pins 1.8.17, a security patch within the same minor series. Phoenix
+  Channels remain the live-delivery mechanism when that work starts.
 - Use plain Elixir/OTP plus Ecto and Postgrex for the Event broker. Do not add
   Phoenix, Plug, Bandit, an HTTP endpoint, or a listener until the broker
   transport ADR is accepted.

@@ -19,7 +19,7 @@ names stay descriptive for humans; module names stay short and stable.
 |---|---|
 | Elixir | 1.20.4 |
 | OTP | 29.1.2 |
-| Phoenix | 1.8.16 (Chat only) |
+| Phoenix | 1.8.17 (Chat only) |
 | Bandit | 1.13.1 (Chat only) |
 | Ecto / Ecto SQL | 3.14 |
 | Postgrex | 0.22 |
