@@ -16,9 +16,10 @@ info:
     answer `413` with `code: payload_too_large` (aligned with ADR 0008's broker
     limit).
 
-    Authentication is provisional pending architecture §9.1: the `chatBearer`
-    scheme name and the 401/403 semantics are stable, the credential format is
-    not.
+    Authentication follows ADR 0016: `chatBearer` is an Auth0-issued JWT
+    validated against the issuer JWKS, with a namespaced `user_id` claim and
+    operation-oriented scopes. Missing or invalid credentials answer `401`;
+    an authenticated caller that is not allowed answers `403`.
 servers:
   - url: /api/v1
 security:
@@ -39,7 +40,7 @@ paths:
       description: >
         Registers one cryptographic device identity. UUIDv7 identifiers are
         minted server-side in application code. The request body limit is
-        256 KiB.
+        256 KiB. Requires the `chat:devices` scope.
       requestBody:
         required: true
         content:
@@ -69,6 +70,7 @@ paths:
               schema: { $ref: '#/components/schemas/Problem' }
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '413': { $ref: '#/components/responses/PayloadTooLarge' }
         '422': { $ref: '#/components/responses/Unprocessable' }
         '429': { $ref: '#/components/responses/RateLimited' }
@@ -80,7 +82,7 @@ paths:
       description: >
         Returns the caller's devices only. No pagination: the set of linked
         devices per user is small and bounded; a larger result set would be a
-        product decision, not a paging problem.
+        product decision, not a paging problem. Requires the `chat:read` scope.
       responses:
         '200':
           description: Devices owned by the authenticated user.
@@ -94,6 +96,7 @@ paths:
                     type: array
                     items: { $ref: '#/components/schemas/DeviceView' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '429': { $ref: '#/components/responses/RateLimited' }
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
 
@@ -102,6 +105,9 @@ paths:
       tags: [devices]
       operationId: revokeDevice
       summary: Revoke one of the authenticated user's devices (idempotent)
+      description: >
+        Revocation is idempotent: a repeat returns the current revoked state.
+        Requires the `chat:devices` scope.
       parameters:
         - name: deviceId
           in: path
@@ -123,6 +129,87 @@ paths:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+
+  /devices/{deviceId}/key-packages:
+    parameters:
+      - name: deviceId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [devices]
+      operationId: uploadKeyPackage
+      summary: Upload one opaque MLS KeyPackage for an owned active device
+      description: >
+        Stores opaque public KeyPackage bytes for a device owned by the
+        authenticated user. `created_at` is server-generated; `expires_at` must
+        be in the future and at most 90 days ahead. Re-uploading the same bytes
+        for the same device is rejected. Atomic one-time claim is deliberately
+        not part of this slice (ADR 0017). Requires the `chat:devices` scope.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UploadKeyPackageRequest' }
+      responses:
+        '201':
+          description: KeyPackage stored.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/KeyPackageView' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404':
+          description: >
+            Unknown device, a device owned by another user, or a non-active
+            device (`code: not_found`), indistinguishable to avoid an existence
+            leak.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '409':
+          description: >
+            `code: conflict`: duplicate bundle bytes for this device, or the
+            configured per-device limit for unconsumed packages was reached.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+    get:
+      tags: [devices]
+      operationId: listKeyPackages
+      summary: List KeyPackage metadata for an owned active device
+      description: >
+        Returns metadata only; KeyPackage bytes are returned only by the
+        deferred claim operation. Requires the `chat:read` scope.
+      responses:
+        '200':
+          description: KeyPackages owned by the device.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/KeyPackageView' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404':
+          description: >
+            Unknown device, a device owned by another user, or a non-active
+            device (`code: not_found`).
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
         '429': { $ref: '#/components/responses/RateLimited' }
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
 
@@ -306,6 +393,7 @@ paths:
         caller choice only when a later slice needs media or per-device modes.
       parameters:
         - $ref: '#/components/parameters/ConversationId'
+        - $ref: '#/components/parameters/DeviceId'
       requestBody:
         required: true
         content:
@@ -486,14 +574,29 @@ components:
     chatBearer:
       type: http
       scheme: bearer
+      bearerFormat: JWT
       description: >
-        Provisional pending architecture §9.1: the scheme name and the
-        401/403 semantics are stable, the credential format is not.
+        Auth0-issued JWT access token (ADR 0016). The token must carry the
+        configured `iss` and `aud`, a short expiry, and the namespaced
+        `user_id` claim equal to `social_db.users.id`. Scopes are
+        operation-oriented (`chat:read`, `chat:write`, `chat:devices`).
+        Missing or invalid authentication answers `401 unauthorized`; an
+        authenticated caller that is not allowed answers `403 forbidden`.
   parameters:
     ConversationId:
       name: conversationId
       in: path
       required: true
+      schema: { type: string, format: uuid }
+    DeviceId:
+      name: X-Device-Id
+      in: header
+      required: true
+      description: >
+        Sending device owned by the authenticated user. The server verifies
+        ownership and `active` status. A missing header answers
+        `400 invalid_request`; an unknown, foreign, or revoked device answers
+        `403 forbidden` without revealing which condition failed.
       schema: { type: string, format: uuid }
   responses:
     BadRequest:
@@ -505,6 +608,14 @@ components:
           schema: { $ref: '#/components/schemas/Problem' }
     Unauthorized:
       description: 'Missing or invalid authentication (`code: unauthorized`).'
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Forbidden:
+      description: >
+        Authenticated but not allowed (`code: forbidden`): the account is not
+        active or a required scope is missing. The response never reveals which
+        condition failed. Device ownership failures answer `404` instead.
       content:
         application/problem+json:
           schema: { $ref: '#/components/schemas/Problem' }
@@ -529,9 +640,11 @@ components:
           schema: { $ref: '#/components/schemas/Problem' }
     ServiceUnavailable:
       description: >
-        The service is temporarily unable to handle the request
-        (`code: service_unavailable`), for example because the database or a
-        required dependency is unreachable; safe to retry later.
+        The service is temporarily unable to handle the request; safe to retry
+        later. `code: service_unavailable` means a local dependency such as the
+        signing keys is unreachable; `code: authorization_unavailable` means the
+        authoritative account-status check could not be completed. The stable
+        `code` field discriminates the two.
       content:
         application/problem+json:
           schema: { $ref: '#/components/schemas/Problem' }
@@ -571,6 +684,8 @@ components:
         - identity_key_conflict
         - duplicate_client_message_id
         - service_unavailable
+        - authorization_unavailable
+        - internal_error
     ProblemFieldError:
       type: object
       additionalProperties: false
@@ -654,6 +769,41 @@ components:
         created_at: { type: string, format: date-time }
         last_seen_at: { type: string, format: date-time }
         revoked_at: { type: string, format: date-time }
+    UploadKeyPackageRequest:
+      type: object
+      additionalProperties: false
+      required: [key_package, ciphersuite, expires_at]
+      properties:
+        key_package:
+          type: string
+          format: byte
+          maxLength: 174764
+          description: Base64-encoded opaque public KeyPackage bytes (131072 decoded bytes).
+        ciphersuite:
+          type: integer
+          minimum: 1
+          maximum: 65535
+          description: Client-supplied MLS ciphersuite (IANA uint16); no allow-list is fixed.
+        expires_at:
+          type: string
+          format: date-time
+          description: Future instant at most 90 days ahead; `created_at` is server-generated.
+        last_resort:
+          type: boolean
+          default: false
+          description: Metadata only; consumption policy remains open per ADR 0007.
+    KeyPackageView:
+      type: object
+      additionalProperties: false
+      required: [id, device_id, ciphersuite, created_at, expires_at, last_resort]
+      properties:
+        id: { type: string, format: uuid }
+        device_id: { type: string, format: uuid }
+        ciphersuite: { type: integer, minimum: 1, maximum: 65535 }
+        created_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time }
+        last_resort: { type: boolean }
+        consumed_at: { type: string, format: date-time }
     CreateConversationRequest:
       type: object
       additionalProperties: false

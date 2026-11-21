@@ -56,6 +56,13 @@ config :asn_chat, AsnChatWeb.Endpoint,
 # Do not include metadata nor timestamps in development logs
 config :logger, :default_formatter, format: "[$level] $message\n"
 
+# ADR 0016 development mode: local issuer key and a local authorization adapter
+# backed by the `chat_users` projection. The generated key file is gitignored;
+# mint tokens with `mix asn_chat.dev_token`.
+config :asn_chat, :auth,
+  dev_keys_path: Path.expand("../priv/dev/auth_key.json", __DIR__),
+  authorization_adapter: AsnChat.Authorization.DevAdapter
+
 # Set a higher stacktrace during development. Avoid configuring such
 # in production as building large stacktraces may be expensive.
 config :phoenix, :stacktrace_depth, 20

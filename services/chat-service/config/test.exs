@@ -26,6 +26,12 @@ config :logger, level: :warning
 
 config :asn_chat, :events_relay, enabled: false, interval_ms: 1_000, publish_timeout_ms: 5_000
 
+# ADR 0016: tests use a fixed generated key (see test_helper.exs) and the
+# development authorization adapter. Tokens are signed by test fixtures only.
+config :asn_chat, :auth,
+  authorization_adapter: AsnChat.Authorization.DevAdapter,
+  authorization_timeout_ms: 100
+
 # Initialize plugs at runtime for faster test compilation
 config :phoenix, :plug_init_mode, :runtime
 
