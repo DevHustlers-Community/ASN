@@ -7,6 +7,11 @@ defmodule AsnEventBroker.RetentionTest do
   @event_id "01912345-6789-7000-8000-000000000001"
   @old "2020-01-01T00:00:00.000000Z"
   @now "2026-10-25T10:00:00.000000Z"
+  @now_dt ~U[2026-10-25T10:00:00.000000Z]
+
+  # Retention.purge/2 takes an injected clock for tests only. The real clock
+  # would make the fixed fixture dates above expire as time passes.
+  defp purge, do: Retention.purge(1_000, @now_dt)
 
   def insert_subscription(name) do
     %Subscription{}
@@ -86,11 +91,11 @@ defmodule AsnEventBroker.RetentionTest do
     backdate_delivered(claimed.delivery_id, @old)
     backdate_event(@event_id, @old)
 
-    assert %{delivered: 1} = Retention.purge()
+    assert %{delivered: 1} = purge()
     refute Repo.get(AsnEventBroker.Delivery.Delivery, claimed.delivery_id)
 
     # Second purge is a no-op.
-    assert %{delivered: 0} = Retention.purge()
+    assert %{delivered: 0} = purge()
   end
 
   test "events purge only past the log floor with no live deliveries" do
@@ -99,13 +104,13 @@ defmodule AsnEventBroker.RetentionTest do
     # Delivered fresh, but event past the floor: delivery within its retention
     # window keeps the event alive.
     backdate_event(@event_id, @old)
-    assert %{events: 0, delivered: 0} = Retention.purge()
+    assert %{events: 0, delivered: 0} = purge()
     assert Repo.get(AsnEventBroker.Events.Event, @event_id)
 
     # Age the delivery past its window: one purge drops the delivery and,
     # in the same run, the event that no delivery needs anymore.
     backdate_delivered(claimed.delivery_id, @old)
-    assert %{delivered: 1, events: 1} = Retention.purge()
+    assert %{delivered: 1, events: 1} = purge()
     assert Repo.all(AsnEventBroker.Events.Event) == []
   end
 
@@ -131,7 +136,7 @@ defmodule AsnEventBroker.RetentionTest do
              Acknowledgements.nack(claimed.delivery_id, claimed.lease_token, "poison")
 
     backdate_event(@event_id, @old)
-    assert %{events: 0} = Retention.purge()
+    assert %{events: 0} = purge()
     assert Repo.get(AsnEventBroker.Events.Event, @event_id)
   end
 
@@ -142,14 +147,14 @@ defmodule AsnEventBroker.RetentionTest do
     # Ten days old: past the 7-day event-log floor but inside the 30-day
     # terminal window, so both rows survive.
     backdate_dead(claimed.delivery_id, "2026-10-15T00:00:00.000000Z")
-    assert %{terminal: 0, events: 0} = Retention.purge()
+    assert %{terminal: 0, events: 0} = purge()
     assert Repo.get(AsnEventBroker.Events.Event, @event_id)
     assert Repo.get(AsnEventBroker.Delivery.Delivery, claimed.delivery_id)
 
     # Past 30 days: the terminal delivery goes first, then the event that no
     # longer has a referencing delivery (the FK is satisfied in one run).
     backdate_dead(claimed.delivery_id, @old)
-    assert %{terminal: 1, events: 1} = Retention.purge()
+    assert %{terminal: 1, events: 1} = purge()
     refute Repo.get(AsnEventBroker.Delivery.Delivery, claimed.delivery_id)
     refute Repo.get(AsnEventBroker.Events.Event, @event_id)
   end
@@ -160,11 +165,11 @@ defmodule AsnEventBroker.RetentionTest do
     backdate_event(@event_id, @old)
 
     backdate_skipped(claimed.delivery_id, "2026-10-15T00:00:00.000000Z")
-    assert %{terminal: 0, events: 0} = Retention.purge()
+    assert %{terminal: 0, events: 0} = purge()
     assert Repo.get(AsnEventBroker.Events.Event, @event_id)
 
     backdate_skipped(claimed.delivery_id, @old)
-    assert %{terminal: 1, events: 1} = Retention.purge()
+    assert %{terminal: 1, events: 1} = purge()
     refute Repo.get(AsnEventBroker.Delivery.Delivery, claimed.delivery_id)
     refute Repo.get(AsnEventBroker.Events.Event, @event_id)
   end
@@ -172,13 +177,13 @@ defmodule AsnEventBroker.RetentionTest do
   test "delivered deliveries purge after 24h, not the 30d terminal window" do
     claimed = publish_and_ack(@event_id)
 
-    # ~5 days old: past the 24h delivered window but inside the 30d terminal
-    # window. Under the old (single-cutoff) code this would survive; with the
-    # per-state cutoff it purges.
-    backdate_delivered(claimed.delivery_id, "2026-10-20T10:00:00.000000Z")
-    backdate_event(@event_id, "2026-10-20T10:00:00.000000Z")
+    # Ten days old: past the 24h delivered window and the 7-day event floor,
+    # but inside the 30d terminal window. Under the old (single-cutoff) code
+    # this would survive; with the per-state cutoff it purges.
+    backdate_delivered(claimed.delivery_id, "2026-10-15T10:00:00.000000Z")
+    backdate_event(@event_id, "2026-10-15T10:00:00.000000Z")
 
-    assert %{delivered: 1, events: 1} = Retention.purge()
+    assert %{delivered: 1, events: 1} = purge()
     refute Repo.get(AsnEventBroker.Delivery.Delivery, claimed.delivery_id)
     refute Repo.get(AsnEventBroker.Events.Event, @event_id)
   end
@@ -187,7 +192,7 @@ defmodule AsnEventBroker.RetentionTest do
     claimed = publish_and_ack(@event_id)
     backdate_event(@event_id, @old)
 
-    assert %{delivered: 0, events: 0} = Retention.purge()
+    assert %{delivered: 0, events: 0} = purge()
     assert Repo.get(AsnEventBroker.Delivery.Delivery, claimed.delivery_id)
     assert Repo.get(AsnEventBroker.Events.Event, @event_id)
   end
