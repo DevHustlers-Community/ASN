@@ -19,6 +19,33 @@ config :asn_chat, :events_relay,
   interval_ms: 1_000,
   publish_timeout_ms: 5_000
 
+# REST authentication and request policy (ADR 0016). Values are overridden per
+# environment; the identifiers below are development placeholders and are not
+# network endpoints.
+config :asn_chat, :auth,
+  issuer: "https://asn.example/",
+  audience: "https://api.asn.example/chat",
+  user_id_claim: "https://asn.example/user_id",
+  allowed_algs: ["RS256"],
+  leeway_seconds: 30,
+  jwks: nil,
+  jwks_url: nil,
+  jwks_cache_ms: 300_000,
+  jwks_max_stale_ms: 3_600_000,
+  jwks_timeout_ms: 2_000,
+  authorization_adapter: AsnChat.Authorization.SocialClient,
+  authorization_timeout_ms: 300,
+  social_base_url: nil,
+  m2m_token: nil
+
+config :asn_chat, :request_limits, max_body_bytes: 262_144
+
+# KeyPackage upload limits (ADR 0017). Operational configuration, not contract.
+config :asn_chat, :key_packages,
+  max_bytes: 131_072,
+  max_lifetime_days: 90,
+  max_per_device: 100
+
 # Configure the endpoint
 config :asn_chat, AsnChatWeb.Endpoint,
   url: [host: "localhost"],

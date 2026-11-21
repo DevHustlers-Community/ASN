@@ -22,6 +22,11 @@ dependency direction; it is not a feature list.
 | `lib/asn_chat.ex` | Namespace for the domain application |
 | `lib/asn_chat/application.ex` | Starts telemetry, repo, PubSub, and endpoint |
 | `lib/asn_chat/repo.ex` | Ecto repo and `chat_db` boundary |
+| `lib/asn_chat/auth/` | JWT verification against the configured JWKS (`token.ex`, `jwks.ex`) |
+| `lib/asn_chat/auth/dev_keys.ex` | Development-only RSA key generation for local tokens |
+| `lib/asn_chat/authorization.ex` | Authoritative authorization behaviour and adapter selection |
+| `lib/asn_chat/authorization/dev_adapter.ex` | Development adapter backed by the `chat_users` projection |
+| `lib/asn_chat/authorization/social_client.ex` | Production Social M2M check; fails closed until configured |
 
 ## Web layer
 
@@ -29,9 +34,11 @@ dependency direction; it is not a feature list.
 |---|---|
 | `lib/asn_chat_web.ex` | Shared `use` macros for JSON controllers and channels |
 | `lib/asn_chat_web/endpoint.ex` | Bandit endpoint and request pipeline |
-| `lib/asn_chat_web/router.ex` | Route registration only; versioned API scope |
+| `lib/asn_chat_web/router.ex` | Route registration only; versioned API scope with authenticated pipelines |
 | `lib/asn_chat_web/telemetry.ex` | Endpoint telemetry definitions |
 | `lib/asn_chat_web/controllers/` | HTTP controllers and error rendering |
+| `lib/asn_chat_web/plugs/` | Authentication, scope enforcement, and request-body limits |
+| `lib/asn_chat_web/problem.ex` | RFC 9457 Problem Details responses |
 | `lib/asn_chat_web/channels/` | Planned Phoenix Channels for live delivery |
 
 `router.ex` registers routes only. Controllers map input/output; contexts hold
@@ -47,7 +54,7 @@ allocation, membership checks, or envelope validation in a controller or channel
 | `messages/` | Planned | Envelope persistence, per-conversation sequence, edits, tombstones | `conversations`, `devices`, `crypto`, `events` |
 | `attachments/` | Planned | Encrypted upload lifecycle and object keys | `conversations`, `messages`, `events` |
 | `read_receipts/` | Planned | Read cursors and receipt state | `conversations`, `messages` |
-| `devices/` | Implemented | Device registry; MLS KeyPackage storage (`device_key_packages`) is the next slice (ADR 0007) | `accounts`, `events` |
+| `devices/` | Implemented | Device registry and opaque KeyPackage upload/listing (ADR 0017); atomic claim deferred | `accounts`, `events` |
 | `crypto/` | Planned | Protocol-neutral envelope validation and key-rotation triggers | `devices`, `messages` |
 | `blocks/` | Planned | `chat_block_edges` projection and fail-closed checks | `accounts`, `events` |
 | `delivery/` | Planned | Channel fan-out, presence, push dispatch | `conversations`, `messages`, `devices` |
@@ -61,7 +68,7 @@ placeholder directories.
 | Path | Responsibility |
 |---|---|
 | `priv/repo/migrations/` | Forward-only migrations owned by Chat |
-| `priv/repo/seeds.exs` | Local seed entry point; currently no product seeds |
+| `priv/repo/seeds.exs` | Development-only user seed; skipped outside `dev` |
 
 Migrations must include their indexes and constraints in the same change. Do not
 create foreign keys to another service's database. Cross-database references are

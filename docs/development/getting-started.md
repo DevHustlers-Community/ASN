@@ -56,8 +56,10 @@ mix ecto.migrate
 mix phx.server
 ```
 
-The service starts on `http://localhost:4002`. There are no routes yet, so `/api`
-returns a 404. Stop it with `Ctrl+C`.
+The service starts on `http://localhost:4002`. Device routes require a bearer
+token; `mix ecto.setup` seeds a development user, and
+`mix asn_chat.dev_token --user 0190f1e2-6d7e-7f80-b192-3d4e5f607182` mints a
+local token for it. Stop it with `Ctrl+C`.
 
 ## 4. Run the Event broker scaffold
 

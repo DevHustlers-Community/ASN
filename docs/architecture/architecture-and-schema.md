@@ -69,7 +69,7 @@ ASN is composed of three business services with clear data ownership, plus a cus
 
 The stack is intentionally polyglot. Services share API and event contracts, not a runtime, an ORM, or direct database access.
 
-Local development pins Elixir 1.20.4 on OTP 29.1.2, Phoenix 1.8.16 for Chat, Ecto 3.14/Postgrex 0.22, Bandit 1.13, and PostgreSQL 18.6. The broker is Ecto-backed but transport-neutral until ADR 0008; it does not embed Phoenix. These are development baselines, not contract versions.
+Local development pins Elixir 1.20.4 on OTP 29.1.2, Phoenix 1.8.17 for Chat, Ecto 3.14/Postgrex 0.22, Bandit 1.13, and PostgreSQL 18.6. The broker is Ecto-backed but transport-neutral until ADR 0008; it does not embed Phoenix. These are development baselines, not contract versions.
 
 ### 1.2 Runtime architecture diagram
 
@@ -470,10 +470,26 @@ bundle, its MLS ciphersuite, creation and expiry timestamps, an optional
 public protocol material is stored; private keys never reach the server. Claiming
 is atomic so a KeyPackage is never handed to two initiators.
 
-Column types, keys, and indexes are finalized with the KeyPackage contract and
-migration. Do not fix them here ahead of that change. The client library gate in
-ADR 0007 remains open; until it passes, development uses `dev-opaque-v1` with the
-same envelope shape.
+Column types, keys, and indexes were finalized by
+[ADR 0017](../decisions/0017-keypackage-storage-before-library-gate.md) together
+with the upload contract and migration:
+
+| Column | Type | Constraints / purpose |
+|---|---|---|
+| `id` | uuid | PK; UUIDv7 minted in application code |
+| `device_id` | uuid | FK to `chat_devices`, `ON DELETE RESTRICT` |
+| `key_package` | bytea | NOT NULL; opaque public MLS bytes |
+| `key_package_sha256` | bytea | NOT NULL; unique per device to reject duplicate bundles |
+| `ciphersuite` | integer | NOT NULL, 1..65535 (IANA uint16) |
+| `created_at` / `expires_at` | timestamptz | NOT NULL; `expires_at > created_at` |
+| `last_resort` | boolean | NOT NULL DEFAULT false; consumption policy still open |
+| `consumed_at` | timestamptz | NULL; reserved for the deferred claim path |
+
+Indexes: unique `(device_id, key_package_sha256)` and partial
+`(device_id, expires_at) WHERE consumed_at IS NULL`. Only upload is implemented
+in this slice; atomic claim is deferred until `blocks/` and rate limiting land.
+The client library gate in ADR 0007 remains open; until it passes, development
+uses `dev-opaque-v1` with the same envelope shape.
 
 ### 3.9 `messages`
 
@@ -971,11 +987,11 @@ Keep these value lists aligned with actual SQL checks:
 
 These do not block schema work, but must be finalized before protocol implementation and release:
 
-1. **REST contract and authentication:** shared error envelope, token/session strategy, service-to-service authentication (mTLS vs signed service tokens), rate-limit policy, and OpenAPI ownership.
+1. **REST contract and authentication:** shared error envelope, token/session strategy, service-to-service authentication (mTLS vs signed service tokens), rate-limit policy, and OpenAPI ownership. Settled in [ADR 0016](../decisions/0016-rest-authentication-and-request-policy.md) (accepted): Auth0 JWT access tokens, a namespaced `user_id` claim, per-service audiences, `X-Device-Id`, Auth0 M2M service tokens, RFC 9457 Problem Details, two-layer rate limits, and an authoritative per-request authorization check against Social. Claim namespaces and audiences are deployment configuration; the development values are placeholders.
 2. **TypeScript service stack:** HTTP framework (Elysia/Hono), query layer (Drizzle/Kysely), migration tool, validation strategy, and the Bun-to-Node fallback criteria.
 3. **Broker transport:** HTTP polling/long-polling vs a persistent connection; lease renewal, max in-flight deliveries, retry/backoff defaults, dead-letter retention, event log retention, payload size limit, and replay authorization. Settled in [ADR 0008](../decisions/0008-broker-transport-and-delivery-contract.md) (accepted): HTTP claim-based pull with long-polling.
 4. **Broker partitioning and scaling:** single-node correctness first; define the measured thresholds that would justify horizontal scaling or partitioning.
-5. **Critical authorization propagation:** explicit completion semantics for blocks, suspensions, bans, community removals, and other security-sensitive state changes. Projection freshness and event lag must not silently weaken enforcement.
+5. **Critical authorization propagation:** explicit completion semantics for blocks, suspensions, bans, community removals, and other security-sensitive state changes. Projection freshness and event lag must not silently weaken enforcement. Account status and session revocation are settled in [ADR 0016](../decisions/0016-rest-authentication-and-request-policy.md) (accepted): every authenticated request performs an authoritative check against Social. Block and community-removal propagation remain open.
 6. **E2EE client library gate:** [ADR 0007](../decisions/0007-e2ee-protocol-selection.md) selects MLS (RFC 9420) and specifies the library pass criteria. The remaining decision is which maintained library satisfies that gate for React Native (Android/iOS) and React web, including licensing, update cadence, test vectors, multi-device behavior, group chat behavior, and post-quantum roadmap. No custom protocol. Until the gate passes, development uses `dev-opaque-v1`.
 7. **Web E2EE parity:** whether web ships E2EE at the same time as mobile, or with a documented limitation. No silent plaintext fallback.
 8. **Device identity verification:** how users see/verify identity-key changes and how revocation propagates.

@@ -54,13 +54,17 @@ defmodule AsnEventBroker.Retention do
   )
   """
 
-  @spec purge(non_neg_integer()) :: %{
+  @doc """
+  Purges expired rows in batches. The optional `now` argument exists only so
+  tests can freeze the clock; callers must not pass a future time, which would
+  purge live rows.
+  """
+  @spec purge(non_neg_integer(), DateTime.t()) :: %{
           delivered: non_neg_integer(),
           terminal: non_neg_integer(),
           events: non_neg_integer()
         }
-  def purge(batch_size \\ 1_000) do
-    now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
+  def purge(batch_size \\ 1_000, now \\ DateTime.utc_now() |> DateTime.truncate(:microsecond)) do
     cutoff_delivered = DateTime.add(now, -delivered_retention_hours(), :hour)
     cutoff_terminal = DateTime.add(now, -terminal_retention_days(), :day)
     cutoff_events = DateTime.add(now, -event_log_days(), :day)

@@ -9,14 +9,16 @@ Status is tracked here; completed items move to the changelog.
 - [x] Broker audit remediation (crashes, retention cutoffs, audit atomicity, DB-time lease checks, indexes, contract, docs)
 - [x] Chat service: scaffold + contract slice 1 (OpenAPI, event schemas, migrations) + outbox + broker relay
 - [x] Chat accounts projection lock and devices context (registration, revocation, listing, device events)
+- [x] Chat REST authentication and request policy ([ADR 0016](docs/decisions/0016-rest-authentication-and-request-policy.md)): JWT verification, authoritative Social authorization check, Problem Details, body limit, and device HTTP endpoints
 - [x] Cross-service e2e happy path (`tests/e2e/broker-relay.sh`): chat outbox → broker → claim → ack → metrics
 - [x] Web client scaffolding + design system
 - [x] Local Swagger UI viewer + endpoint-doc rule
+- [x] Chat KeyPackage **upload** ([ADR 0017](docs/decisions/0017-keypackage-storage-before-library-gate.md)): `device_key_packages` table, opaque upload endpoint, digest uniqueness, and device-owned listing. Claim is deferred.
 
 ## Next (recommended order)
 
-1. [ ] **Authentication ADR** (architecture §9.1) — blocks every Chat HTTP endpoint: token/session strategy, service-to-service auth, shared error envelope, rate limits.
-2. [ ] **Chat KeyPackage slice** — OpenAPI upload/claim operations, `device_key_packages` migration, context, atomic claim, and concurrency tests. MLS is selected by ADR 0007; this is not blocked on protocol selection.
+1. [ ] **Chat KeyPackage claim** — atomic one-time claim and concurrency tests, after `blocks/` enforces block/ban status on upload and claim and service-level rate limiting exists ([ADR 0017](docs/decisions/0017-keypackage-storage-before-library-gate.md) follow-up). Upload already landed.
+2. [ ] **Chat conversations and messages** — conversation/membership contexts, per-conversation sequence issuance, opaque envelope send/history, and read cursors against the existing contract.
 3. [ ] **TypeScript service stack ADR** (§9.2) — HTTP framework, query layer, validation, and migration tooling — then Social API scaffolding and `user.*` events for the `chat_users` projection.
 4. [ ] **Moderation API scaffolding** after the TypeScript stack ADR.
 5. [ ] **API client generation** — generator ADR, generated `packages/api-client`, CI drift check, then Web API integration.

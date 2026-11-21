@@ -16,13 +16,16 @@ defmodule AsnChat.Devices do
   import Ecto.Query
 
   alias AsnChat.Accounts
-  alias AsnChat.Devices.{Device, Events}
+  alias AsnChat.Devices.{Device, Events, KeyPackage}
   alias AsnChat.Events.Outbox
   alias AsnChat.Repo
 
   @type error ::
           :identity_key_conflict
           | :user_not_found
+          | :not_found
+          | :duplicate
+          | :limit_reached
           | Ecto.Changeset.t()
           | {:outbox_failed, Ecto.Changeset.t()}
 
@@ -84,6 +87,63 @@ defmodule AsnChat.Devices do
 
       :error ->
         {:ok, []}
+    end
+  end
+
+  @doc """
+  Stores one opaque KeyPackage for a device owned by `user_id` (ADR 0017).
+
+  `bytes` must already be decoded; base64 decoding belongs to the HTTP layer.
+  Ownership, active-device status, the per-device cap, and the SHA-256 digest
+  are enforced here. Unknown or foreign devices answer `{:error, :not_found}`;
+  repeated bytes answer `{:error, :duplicate}`. No outbox event is written:
+  there is no KeyPackage event contract yet.
+  """
+  @spec upload_key_package(String.t(), String.t(), binary(), map(), keyword()) ::
+          {:ok, KeyPackage.t()} | {:error, error()}
+  def upload_key_package(user_id, device_id, bytes, attrs, opts \\ []) do
+    opts = Keyword.merge(key_package_config(), opts)
+
+    transact(fn ->
+      user = Accounts.lock_user(user_id)
+
+      if is_nil(user) do
+        Repo.rollback(:not_found)
+      end
+
+      case fetch_active_device(user.id, device_id) do
+        nil -> Repo.rollback(:not_found)
+        device -> insert_key_package(device.id, bytes, attrs, opts)
+      end
+    end)
+  end
+
+  @doc """
+  Lists KeyPackage metadata for a device owned by `user_id`.
+
+  Bytes are not returned by this context; the deferred claim operation will be
+  the only reader of `key_package`.
+  """
+  @spec list_key_packages(String.t(), String.t()) ::
+          {:ok, [KeyPackage.t()]} | {:error, :not_found}
+  def list_key_packages(user_id, device_id) do
+    case Ecto.UUID.cast(user_id) do
+      {:ok, uuid} ->
+        case fetch_active_device(uuid, device_id, false) do
+          nil ->
+            {:error, :not_found}
+
+          device ->
+            {:ok,
+             Repo.all(
+               from k in KeyPackage,
+                 where: k.device_id == ^device.id,
+                 order_by: [asc: k.created_at, asc: k.id]
+             )}
+        end
+
+      :error ->
+        {:error, :not_found}
     end
   end
 
@@ -177,6 +237,58 @@ defmodule AsnChat.Devices do
             d.status == :active,
         lock: "FOR NO KEY UPDATE"
     )
+  end
+
+  defp insert_key_package(device_id, bytes, attrs, opts) do
+    now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
+
+    count =
+      Repo.one(
+        from k in KeyPackage,
+          where: k.device_id == ^device_id and is_nil(k.consumed_at) and k.expires_at > ^now,
+          select: count(k.id)
+      )
+
+    if count >= Keyword.fetch!(opts, :max_per_device) do
+      Repo.rollback(:limit_reached)
+    else
+      changeset =
+        KeyPackage.upload_changeset(
+          device_id,
+          :crypto.hash(:sha256, bytes),
+          bytes,
+          attrs,
+          opts
+        )
+
+      case Repo.insert(changeset) do
+        {:ok, key_package} -> {:ok, key_package}
+        {:error, changeset} -> Repo.rollback(duplicate_or_changeset(changeset))
+      end
+    end
+  end
+
+  defp fetch_active_device(user_id, device_id, lock? \\ true) do
+    case Ecto.UUID.cast(device_id) do
+      {:ok, uuid} ->
+        query =
+          from d in Device,
+            where: d.id == ^uuid and d.user_id == ^user_id and d.status == :active
+
+        Repo.one(if lock?, do: lock(query, "FOR NO KEY UPDATE"), else: query)
+
+      :error ->
+        nil
+    end
+  end
+
+  defp duplicate_or_changeset(changeset) do
+    if unique_constraint_error?(changeset), do: :duplicate, else: changeset
+  end
+
+  defp key_package_config do
+    [max_bytes: 196_608, max_lifetime_days: 90, max_per_device: 100]
+    |> Keyword.merge(Application.get_env(:asn_chat, :key_packages, []))
   end
 
   defp fetch_device_for_update(user_id, device_id) do

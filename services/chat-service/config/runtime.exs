@@ -23,6 +23,56 @@ end
 config :asn_chat, AsnChatWeb.Endpoint,
   http: [port: String.to_integer(System.get_env("CHAT_SERVICE_PORT", "4002"))]
 
+# ADR 0016 runtime overrides. The defaults in config/config.exs are development
+# placeholders; production supplies its own issuer, audience, claim namespace,
+# and JWKS URL. A missing issuer/audience makes token validation fail closed.
+# An empty string in .env.example means "unset", not "configured as empty".
+env = fn name ->
+  case System.get_env(name) do
+    nil -> nil
+    "" -> nil
+    value -> value
+  end
+end
+
+auth = Application.get_env(:asn_chat, :auth, [])
+
+# ADR 0016 §11: the local adapter is dev/test only. Selecting it in production
+# would bypass the authoritative account-status check, so fail fast at boot.
+adapter_env = env.("ASN_AUTHORIZATION_ADAPTER")
+
+authorization_adapter =
+  case adapter_env do
+    "dev" ->
+      if config_env() in [:dev, :test] do
+        AsnChat.Authorization.DevAdapter
+      else
+        raise "ASN_AUTHORIZATION_ADAPTER=dev is not allowed outside dev and test"
+      end
+
+    nil ->
+      if config_env() == :prod do
+        AsnChat.Authorization.SocialClient
+      else
+        Keyword.get(auth, :authorization_adapter, AsnChat.Authorization.SocialClient)
+      end
+
+    other ->
+      raise "unknown ASN_AUTHORIZATION_ADAPTER #{inspect(other)}"
+  end
+
+config :asn_chat,
+       :auth,
+       Keyword.merge(auth,
+         issuer: env.("ASN_AUTH_ISSUER") || auth[:issuer],
+         audience: env.("ASN_AUTH_AUDIENCE") || auth[:audience],
+         user_id_claim: env.("ASN_AUTH_USER_ID_CLAIM") || auth[:user_id_claim],
+         jwks_url: env.("ASN_AUTH_JWKS_URL") || auth[:jwks_url],
+         social_base_url: env.("SOCIAL_INTERNAL_URL") || auth[:social_base_url],
+         m2m_token: env.("ASN_M2M_TOKEN") || auth[:m2m_token],
+         authorization_adapter: authorization_adapter
+       )
+
 if config_env() == :prod do
   database_url =
     System.get_env("CHAT_DATABASE_URL") ||
