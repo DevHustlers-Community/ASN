@@ -63,7 +63,7 @@ Rules:
 `broker_db` is owned by the broker service. No other service reads or writes it.
 
 Local development pins Elixir 1.20.4 on OTP 29.1.2 via [`.tool-versions`](.tool-versions),
-Phoenix 1.8.16 for Chat, and PostgreSQL 18.6 via [`compose.yaml`](compose.yaml).
+Phoenix 1.8.17 for Chat, and PostgreSQL 18.6 via [`compose.yaml`](compose.yaml).
 Service lockfiles pin the resolved dependency versions.
 
 ## 4. Repository map

@@ -69,7 +69,7 @@ ASN is composed of three business services with clear data ownership, plus a cus
 
 The stack is intentionally polyglot. Services share API and event contracts, not a runtime, an ORM, or direct database access.
 
-Local development pins Elixir 1.20.4 on OTP 29.1.2, Phoenix 1.8.16 for Chat, Ecto 3.14/Postgrex 0.22, Bandit 1.13, and PostgreSQL 18.6. The broker is Ecto-backed but transport-neutral until ADR 0008; it does not embed Phoenix. These are development baselines, not contract versions.
+Local development pins Elixir 1.20.4 on OTP 29.1.2, Phoenix 1.8.17 for Chat, Ecto 3.14/Postgrex 0.22, Bandit 1.13, and PostgreSQL 18.6. The broker is Ecto-backed but transport-neutral until ADR 0008; it does not embed Phoenix. These are development baselines, not contract versions.
 
 ### 1.2 Runtime architecture diagram
 

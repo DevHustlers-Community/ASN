@@ -10,7 +10,7 @@ services you choose to run on the host.
 | Erlang / OTP | 29.1.2 | [`.tool-versions`](../../.tool-versions) |
 | Elixir | 1.20.4-otp-29 | [`.tool-versions`](../../.tool-versions) |
 | Bun | 1.4.4 | [`.tool-versions`](../../.tool-versions) |
-| Phoenix | 1.8.16 | `services/chat-service/mix.lock` |
+| Phoenix | 1.8.17 | `services/chat-service/mix.lock` |
 | PostgreSQL | 18.6 | [`compose.yaml`](../../compose.yaml) |
 | Database image | `postgres:18.6-alpine3.24` | [`compose.yaml`](../../compose.yaml) |
 
