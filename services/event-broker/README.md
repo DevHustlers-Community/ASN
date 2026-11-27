@@ -29,7 +29,7 @@ database remains the source of truth.
 | Elixir / OTP | 1.20.4 / 29.1.2, pinned in [`.tool-versions`](../../.tool-versions) |
 | Persistence | Ecto 3.14 / Ecto SQL 3.14 / Postgrex 0.22 |
 | Database | PostgreSQL 18.6 locally via [`compose.yaml`](../../compose.yaml) |
-| HTTP / Phoenix | Not included; the broker starts as a plain OTP application |
+| HTTP / Phoenix | Plug + Bandit at the HTTP edge; the broker core remains a plain OTP application |
 
 The OTP application is `:asn_event_broker`; the root module is
 `AsnEventBroker`.
@@ -53,7 +53,7 @@ rules.
 | `lib/asn_event_broker/acknowledgements.ex` | Ack/nack/extend with exact lease-token semantics |
 | `lib/asn_event_broker/retries.ex` | Bounded exponential backoff with jitter |
 | `lib/asn_event_broker/workers/` | Scheduled workers (lease reaper, retention purge) |
-| `lib/asn_event_broker/security/` | Service credential schema (auth flow lands with the HTTP edge) |
+| `lib/asn_event_broker/security/` | Service credential issuance, expiry, revocation, and consumer-service authorization |
 | `lib/asn_event_broker/audit/` | Append-only admin audit records |
 | `config/` | Compile-time configuration plus dev/test/prod/runtime split |
 | `priv/repo/migrations/` | Broker-owned forward-only migrations |
@@ -232,8 +232,10 @@ bootstrap, then waits. The
 first credential is seeded from `BROKER_ADMIN_TOKEN` when the credentials
 table is empty; further credentials are issued, listed, and revoked through
 the admin endpoints (`/v1/credentials`, `/v1/credentials/{id}/revoke`), and
-subscriptions are paused, resumed, and re-filtered through
-`PATCH /v1/subscriptions/{name}` — all audited.
+subscriptions are created, paused, resumed, and re-filtered through the admin
+endpoints — all audited. Credential issuance honors an optional future
+`expires_at`. Consume operations require the credential's `service_name` to
+match the subscription's `consumer`; cross-service resources return `404`.
 
 For the full one-command verification loop, run `scripts/dev/broker-verify.sh`
 from the repository root.
@@ -325,11 +327,9 @@ The detailed tables, environment, and per-run decisions are in
 | `BROKER_TEST_DATABASE_URL` | test | Dev default points at `broker_db_test` |
 | `POOL_SIZE` | prod | Ecto pool size, default `10` |
 
-`BROKER_BASE_URL`, `BROKER_SERVICE_TOKEN`, `BROKER_ADMIN_TOKEN`, and
-`EVENT_BROKER_PORT` in [`.env.example`](../../.env.example) are reserved for the
-transport and credential layers ([ADR 0008](../../docs/decisions/0008-broker-transport-and-delivery-contract.md),
-accepted) and are not read by the scaffold. `BROKER_ADMIN_TOKEN` seeds the
-first admin credential at first boot once credential storage exists.
+`BROKER_BASE_URL` and `BROKER_SERVICE_TOKEN` are consumed by producer services.
+`BROKER_ADMIN_TOKEN` seeds the first admin credential at first boot.
+`EVENT_BROKER_PORT` configures the broker HTTP listener.
 
 ### Scheduled workers
 
@@ -419,6 +419,7 @@ checkout and assert the rendered values.
 - Only the broker reads or writes `broker_db`. No business service gets a
   connection string to it.
 - The broker does not validate business fields or read producer databases.
+- Consume credentials are bound to their subscription's consumer service.
 - Delivery is at-least-once; consumers deduplicate on `event_id` and reject stale
   updates with `aggregate_version`.
 - Ordering is per aggregate only. There is no global event order.
@@ -428,10 +429,11 @@ checkout and assert the rendered values.
 ## Tests
 
 Current coverage exercises envelope validation, idempotent publish and fan-out,
-claim/lease/ack/nack/extend semantics, dead-letter replay and skip, retention
-purges, credential authorization, the HTTP edge, Prometheus metrics, and
-property-based concurrency. Database-backed tests run against a real
-PostgreSQL instance. Required failure paths are listed in
+claim/lease/ack/nack/extend semantics, consumer-service isolation, credential
+expiry and revocation, audited subscription creation and updates, lease-reaper
+backoff, dead-letter replay and skip, retention purges, the HTTP edge,
+Prometheus metrics, and property-based concurrency. Database-backed tests run
+against a real PostgreSQL instance. Required failure paths are listed in
 [`AGENTS.md`](../../AGENTS.md#7-verification).
 
 ## Related

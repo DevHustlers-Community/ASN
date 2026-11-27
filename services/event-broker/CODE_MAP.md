@@ -1,7 +1,8 @@
 # Event broker code map
 
-Companion to the [service README](README.md). The broker is transport-neutral
-until [ADR 0008](../../docs/decisions/README.md) selects a delivery transport.
+Companion to the [service README](README.md). The broker core is transport-neutral;
+[ADR 0008](../../docs/decisions/0008-broker-transport-and-delivery-contract.md)
+selects the HTTP claim-based pull adapter implemented at the edge.
 
 ## Rules
 
@@ -30,7 +31,7 @@ happens one full interval after boot — there is no immediate tick at start.
 
 | File | Responsibility |
 |---|---|
-| `lib/asn_event_broker/workers/lease_reaper.ex` | Returns expired leases to `pending`, or dead-letters them when attempts are exhausted |
+| `lib/asn_event_broker/workers/lease_reaper.ex` | Returns expired leases to `pending` with database-clock backoff, or dead-letters them when attempts are exhausted |
 | `lib/asn_event_broker/workers/retention_worker.ex` | Schedules the dependency-aware retention purge (`Retention.purge/1`) every `retention_interval_ms` |
 
 ## Planned subsystems

@@ -28,14 +28,25 @@ defmodule AsnEventBroker.SecurityTest do
     assert {:error, :unauthorized} = Security.authorize("Bearer " <> issued.token)
   end
 
-  test "an expired token is unauthorized" do
-    {:ok, issued} = Security.issue("test-service", [:publish])
+  test "issued expiry is persisted and an expired token is unauthorized" do
+    expires_at = DateTime.utc_now() |> DateTime.truncate(:microsecond) |> DateTime.add(3600)
+    {:ok, issued} = Security.issue("test-service", [:publish], expires_at: expires_at)
+
+    credential = Repo.get!(ServiceCredential, issued.credential_id)
+    assert credential.expires_at == expires_at
+    assert {:ok, %ServiceCredential{}} = Security.authorize("Bearer " <> issued.token)
 
     past = DateTime.utc_now() |> DateTime.truncate(:microsecond) |> DateTime.add(-3600)
-    credential = Repo.get!(ServiceCredential, issued.credential_id)
-    Ecto.Changeset.change(credential, expires_at: past) |> Repo.update!()
+    credential |> Ecto.Changeset.change(expires_at: past) |> Repo.update!()
 
     assert {:error, :unauthorized} = Security.authorize("Bearer " <> issued.token)
+  end
+
+  test "issuing a credential with a past expiry is rejected" do
+    past = DateTime.utc_now() |> DateTime.truncate(:microsecond) |> DateTime.add(-60)
+
+    assert {:error, changeset} = Security.issue("test-service", [:publish], expires_at: past)
+    assert changeset.errors[:expires_at]
   end
 
   test "an unknown token is unauthorized" do

@@ -10,17 +10,25 @@ defmodule AsnEventBroker.Workers.LeaseReaper do
 
   use GenServer
 
-  alias AsnEventBroker.{Repo, Telemetry}
+  alias AsnEventBroker.{Repo, Retries, Telemetry}
 
   @reap_sql """
   UPDATE deliveries
   SET state = CASE WHEN attempts >= max_attempts THEN 'dead' ELSE 'pending' END,
-      dead_lettered_at = CASE WHEN attempts >= max_attempts THEN $1 ELSE NULL END,
-      next_attempt_at = CASE WHEN attempts >= max_attempts THEN NULL ELSE $1 END,
+      dead_lettered_at = CASE WHEN attempts >= max_attempts THEN clock_timestamp() ELSE NULL END,
+      next_attempt_at = CASE
+        WHEN attempts >= max_attempts THEN NULL
+        ELSE clock_timestamp() + (
+          floor(random() * LEAST(
+            $1::double precision,
+            $2::double precision * power(2::double precision, attempts - 1)
+          )) + 1
+        ) * interval '1 millisecond'
+      END,
       lease_token_hash = NULL,
       lease_expires_at = NULL,
-      updated_at = $1
-  WHERE state = 'leased' AND lease_expires_at <= $1
+      updated_at = clock_timestamp()
+  WHERE state = 'leased' AND lease_expires_at <= clock_timestamp()
   RETURNING id
   """
 
@@ -42,9 +50,13 @@ defmodule AsnEventBroker.Workers.LeaseReaper do
   @doc "Reaps every expired lease once and returns the number of rows affected."
   @spec reap() :: non_neg_integer()
   def reap do
-    now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
-
-    case Repo.query!(@reap_sql, [now]) do
+    # Keep the reaper as one batched statement. The SQL mirrors
+    # Retries.next_delay_ms/1: full jitter from 1 through the capped exponential
+    # delay, calculated on the database clock.
+    case Repo.query!(@reap_sql, [
+           Retries.delivery_cfg(:backoff_cap_ms),
+           Retries.delivery_cfg(:backoff_base_ms)
+         ]) do
       %{num_rows: count} ->
         if count > 0, do: Telemetry.emit([:lease_expired], %{count: count}, %{})
         count

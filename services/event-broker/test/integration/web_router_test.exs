@@ -5,7 +5,11 @@ defmodule AsnEventBroker.Web.RouterTest do
 
   @router AsnEventBroker.Web.Router
 
-  def issue(scopes, opts \\ []), do: Security.issue("test-service", scopes, opts) |> elem(1)
+  def issue(scopes, opts \\ []) do
+    service_name = Keyword.get(opts, :service_name, "test-service")
+    opts = Keyword.delete(opts, :service_name)
+    Security.issue(service_name, scopes, opts) |> elem(1)
+  end
 
   def call(method, path, credential_token, body \\ nil) do
     headers =
@@ -115,9 +119,10 @@ defmodule AsnEventBroker.Web.RouterTest do
     assert %{status: 201} = call("POST", "/v1/events", restricted, report)
   end
 
-  test "claims, ack, and nack over HTTP with lease-token rules" do
+  test "claims and ack over HTTP with lease-token rules and consumer isolation" do
     # Seed a subscription and an event through the API itself.
-    admin = issue([:publish, :consume, :admin]).token
+    admin = issue([:publish, :admin]).token
+    consumer = issue([:consume], service_name: "chat-service").token
 
     assert %{status: 201} =
              call("POST", "/v1/subscriptions", admin, %{
@@ -128,7 +133,10 @@ defmodule AsnEventBroker.Web.RouterTest do
     assert %{status: 201} = call("POST", "/v1/events", admin, publish_body(Ecto.UUID.generate()))
 
     conn =
-      call("POST", "/v1/subscriptions/chat-identity/claims", admin, %{"max" => 10, "wait_ms" => 0})
+      call("POST", "/v1/subscriptions/chat-identity/claims", consumer, %{
+        "max" => 10,
+        "wait_ms" => 0
+      })
 
     assert conn.status == 200
 
@@ -136,22 +144,64 @@ defmodule AsnEventBroker.Web.RouterTest do
              Jason.decode!(conn.resp_body)["deliveries"]
 
     assert %{status: 200} =
-             call("POST", "/v1/deliveries/#{id}/ack", admin, %{"lease_token" => token})
+             call("POST", "/v1/deliveries/#{id}/ack", consumer, %{"lease_token" => token})
 
     assert %{status: 200} =
-             call("POST", "/v1/deliveries/#{id}/ack", admin, %{"lease_token" => token})
+             call("POST", "/v1/deliveries/#{id}/ack", consumer, %{"lease_token" => token})
 
-    other = issue([:consume]).token
+    other = issue([:consume], service_name: "other-service").token
 
-    assert %{status: 200} =
+    assert %{status: 404} =
              call("POST", "/v1/subscriptions/chat-identity/claims", other, %{
                "max" => 10,
                "wait_ms" => 0
              })
   end
 
+  test "cross-service credentials cannot ack, nack, or extend another service's delivery" do
+    admin = issue([:publish, :admin]).token
+    consumer = issue([:consume], service_name: "chat-service").token
+    other = issue([:consume], service_name: "other-service").token
+    publisher = issue([:publish], service_name: "social-api").token
+
+    assert %{status: 201} =
+             call("POST", "/v1/subscriptions", admin, %{
+               "name" => "isolated-delivery",
+               "consumer" => "chat-service"
+             })
+
+    assert %{status: 201} = call("POST", "/v1/events", admin, publish_body(Ecto.UUID.generate()))
+
+    assert %{"deliveries" => [delivery]} =
+             call("POST", "/v1/subscriptions/isolated-delivery/claims", consumer, %{
+               "max" => 1,
+               "wait_ms" => 0
+             })
+             |> Map.fetch!(:resp_body)
+             |> Jason.decode!()
+
+    id = delivery["delivery_id"]
+    token = delivery["lease_token"]
+
+    for path <- ["ack", "nack", "extend"] do
+      assert %{status: 404} =
+               call("POST", "/v1/deliveries/#{id}/#{path}", other, %{"lease_token" => token})
+    end
+
+    assert %{status: 403} =
+             call("POST", "/v1/deliveries/#{id}/ack", publisher, %{"lease_token" => token})
+
+    row = Repo.get!(AsnEventBroker.Delivery.Delivery, id)
+    assert row.state == :leased
+    assert row.lease_token_hash == :crypto.hash(:sha256, token) |> Base.encode16(case: :lower)
+
+    assert %{status: 200} =
+             call("POST", "/v1/deliveries/#{id}/extend", consumer, %{"lease_token" => token})
+  end
+
   test "paused subscriptions claim with 409" do
-    admin = issue([:publish, :consume, :admin]).token
+    admin = issue([:publish, :admin]).token
+    consumer = issue([:consume], service_name: "chat-service").token
 
     assert %{status: 201} =
              call("POST", "/v1/subscriptions", admin, %{
@@ -162,14 +212,15 @@ defmodule AsnEventBroker.Web.RouterTest do
 
     assert %{status: 201} = call("POST", "/v1/events", admin, publish_body(Ecto.UUID.generate()))
 
-    conn = call("POST", "/v1/subscriptions/paused-sub/claims", admin, %{"max" => 1})
+    conn = call("POST", "/v1/subscriptions/paused-sub/claims", consumer, %{"max" => 1})
     assert conn.status == 409
     assert %{"code" => "subscription_paused"} = Jason.decode!(conn.resp_body)
   end
 
   test "dead-letter skip and replay over HTTP are admin-scoped" do
-    admin = issue([:publish, :consume, :admin]).token
-    consumer = issue([:consume]).token
+    admin = issue([:publish, :admin]).token
+    consumer = issue([:consume], service_name: "chat-service").token
+    other_consumer = issue([:consume], service_name: "other-service").token
 
     assert %{status: 201} =
              call("POST", "/v1/subscriptions", admin, %{
@@ -180,12 +231,14 @@ defmodule AsnEventBroker.Web.RouterTest do
 
     assert %{status: 201} = call("POST", "/v1/events", admin, publish_body(Ecto.UUID.generate()))
 
-    conn = call("POST", "/v1/subscriptions/dl-sub/claims", admin, %{"max" => 1, "wait_ms" => 0})
+    conn =
+      call("POST", "/v1/subscriptions/dl-sub/claims", consumer, %{"max" => 1, "wait_ms" => 0})
+
     assert %{"deliveries" => [delivery]} = Jason.decode!(conn.resp_body)
 
     # nack to dead (max_attempts = 1)
     assert %{status: 200} =
-             call("POST", "/v1/deliveries/#{delivery["delivery_id"]}/nack", admin, %{
+             call("POST", "/v1/deliveries/#{delivery["delivery_id"]}/nack", consumer, %{
                "lease_token" => delivery["lease_token"],
                "error_kind" => "poison"
              })
@@ -197,6 +250,11 @@ defmodule AsnEventBroker.Web.RouterTest do
     # consume scope cannot replay
     assert %{status: 403} =
              call("POST", "/v1/dead-letters/replay", consumer, %{"delivery_id" => dead_id})
+
+    assert %{status: 404} =
+             call("POST", "/v1/deliveries/#{dead_id}/ack", other_consumer, %{
+               "lease_token" => delivery["lease_token"]
+             })
 
     assert %{status: 200} =
              call("POST", "/v1/dead-letters/replay", admin, %{"delivery_id" => dead_id})
@@ -231,13 +289,16 @@ defmodule AsnEventBroker.Web.RouterTest do
   end
 
   test "PATCH subscription pauses and resumes with an audit trail" do
-    admin = issue([:publish, :consume, :admin]).token
+    admin = issue([:publish, :admin]).token
+    consumer = issue([:consume], service_name: "chat-service").token
 
-    assert %{status: 201} =
+    assert %{status: 201, resp_body: body} =
              call("POST", "/v1/subscriptions", admin, %{
                "name" => "patched",
                "consumer" => "chat-service"
              })
+
+    assert Jason.decode!(body)["max_attempts"] == 5
 
     assert %{status: 201} = call("POST", "/v1/events", admin, publish_body(Ecto.UUID.generate()))
 
@@ -245,22 +306,37 @@ defmodule AsnEventBroker.Web.RouterTest do
              call("PATCH", "/v1/subscriptions/patched", admin, %{"status" => "paused"})
 
     assert Jason.decode!(body)["status"] == "paused"
-    assert %{status: 409} = call("POST", "/v1/subscriptions/patched/claims", admin, %{"max" => 1})
+
+    assert %{status: 409} =
+             call("POST", "/v1/subscriptions/patched/claims", consumer, %{"max" => 1})
 
     assert %{status: 200} =
              call("PATCH", "/v1/subscriptions/patched", admin, %{"status" => "active"})
 
-    assert %{status: 200} = call("POST", "/v1/subscriptions/patched/claims", admin, %{"max" => 1})
+    assert %{status: 200} =
+             call("POST", "/v1/subscriptions/patched/claims", consumer, %{"max" => 1})
 
-    audit_actions = Repo.all(AsnEventBroker.Audit.AuditEntry) |> Enum.map(& &1.action)
+    entries = Repo.all(AsnEventBroker.Audit.AuditEntry)
+    audit_actions = Enum.map(entries, & &1.action)
+    assert "subscription.create" in audit_actions
     assert "subscription.update" in audit_actions
+
+    created =
+      Enum.find(
+        entries,
+        &(&1.action == "subscription.create" and &1.target == "subscription:patched")
+      )
+
+    assert created.params["max_attempts"] == 5
+    assert created.params["consumer"] == "chat-service"
 
     assert %{status: 404} =
              call("PATCH", "/v1/subscriptions/nope", admin, %{"status" => "paused"})
   end
 
   test "PATCH subscription can update event_types filters" do
-    admin = issue([:publish, :consume, :admin]).token
+    admin = issue([:publish, :admin]).token
+    consumer = issue([:consume], service_name: "chat-service").token
 
     assert %{status: 201} =
              call("POST", "/v1/subscriptions", admin, %{
@@ -280,7 +356,7 @@ defmodule AsnEventBroker.Web.RouterTest do
     # New filter applies from now on: deliveries are created at publish time.
     assert %{status: 201} = call("POST", "/v1/events", admin, publish_body(Ecto.UUID.generate()))
 
-    conn = call("POST", "/v1/subscriptions/filtered/claims", admin, %{"max" => 10})
+    conn = call("POST", "/v1/subscriptions/filtered/claims", consumer, %{"max" => 10})
     assert [%{"type" => "user.created"}] = Jason.decode!(conn.resp_body)["deliveries"]
   end
 
@@ -322,6 +398,34 @@ defmodule AsnEventBroker.Web.RouterTest do
     assert "credential.revoke" in audit_actions
   end
 
+  test "credential issuance persists a future expires_at" do
+    admin = issue([:admin]).token
+    expires_at = DateTime.utc_now() |> DateTime.truncate(:microsecond) |> DateTime.add(3600)
+
+    conn =
+      call("POST", "/v1/credentials", admin, %{
+        "service_name" => "expiring-service",
+        "scopes" => ["publish"],
+        "expires_at" => DateTime.to_iso8601(expires_at)
+      })
+
+    assert %{status: 201} = conn
+    %{"credential_id" => credential_id, "token" => token} = Jason.decode!(conn.resp_body)
+
+    views =
+      call("GET", "/v1/credentials", admin)
+      |> Map.fetch!(:resp_body)
+      |> Jason.decode!()
+      |> Map.fetch!("credentials")
+
+    view = Enum.find(views, &(&1["credential_id"] == credential_id))
+    assert view["expires_at"] == DateTime.to_iso8601(expires_at)
+    refute Map.has_key?(view, "token")
+
+    assert %{status: 201} =
+             call("POST", "/v1/events", token, publish_body(Ecto.UUID.generate()))
+  end
+
   test "credential issuance rejects unknown scopes" do
     admin = issue([:admin]).token
 
@@ -357,7 +461,8 @@ defmodule AsnEventBroker.Web.RouterTest do
   end
 
   test "claim max and delivery limit reject malformed or out-of-range values" do
-    admin = issue([:publish, :consume, :admin]).token
+    admin = issue([:publish, :admin]).token
+    consumer = issue([:consume], service_name: "chat-service").token
 
     assert %{status: 201} =
              call("POST", "/v1/subscriptions", admin, %{
@@ -367,7 +472,7 @@ defmodule AsnEventBroker.Web.RouterTest do
 
     for bad_max <- ["abc", 0] do
       conn =
-        call("POST", "/v1/subscriptions/bounds-sub/claims", admin, %{
+        call("POST", "/v1/subscriptions/bounds-sub/claims", consumer, %{
           "max" => bad_max,
           "wait_ms" => 0
         })
@@ -386,20 +491,39 @@ defmodule AsnEventBroker.Web.RouterTest do
   end
 
   test "ack and nack reject malformed ids and missing lease tokens without crashing" do
-    admin = issue([:publish, :consume, :admin]).token
+    admin = issue([:publish, :admin]).token
+    consumer = issue([:consume], service_name: "chat-service").token
 
-    conn = call("POST", "/v1/deliveries/not-a-uuid/ack", admin, %{"lease_token" => "token"})
+    conn = call("POST", "/v1/deliveries/not-a-uuid/ack", consumer, %{"lease_token" => "token"})
     assert conn.status == 404
     assert %{"code" => "not_found"} = Jason.decode!(conn.resp_body)
 
-    conn = call("POST", "/v1/deliveries/not-a-uuid/nack", admin, %{"lease_token" => "token"})
+    conn = call("POST", "/v1/deliveries/not-a-uuid/nack", consumer, %{"lease_token" => "token"})
     assert conn.status == 404
 
-    conn = call("POST", "/v1/deliveries/#{Ecto.UUID.generate()}/ack", admin, %{})
+    assert %{status: 201} =
+             call("POST", "/v1/subscriptions", admin, %{
+               "name" => "missing-token",
+               "consumer" => "chat-service"
+             })
+
+    assert %{status: 201} = call("POST", "/v1/events", admin, publish_body(Ecto.UUID.generate()))
+
+    assert %{"deliveries" => [delivery]} =
+             call("POST", "/v1/subscriptions/missing-token/claims", consumer, %{
+               "max" => 1,
+               "wait_ms" => 0
+             })
+             |> Map.fetch!(:resp_body)
+             |> Jason.decode!()
+
+    id = delivery["delivery_id"]
+
+    conn = call("POST", "/v1/deliveries/#{id}/ack", consumer, %{})
     assert conn.status == 400
     assert %{"code" => "invalid_request"} = Jason.decode!(conn.resp_body)
 
-    conn = call("POST", "/v1/deliveries/#{Ecto.UUID.generate()}/extend", admin, %{})
+    conn = call("POST", "/v1/deliveries/#{id}/extend", consumer, %{})
     assert conn.status == 400
   end
 
@@ -413,7 +537,7 @@ defmodule AsnEventBroker.Web.RouterTest do
     end
   end
 
-  test "credential issuance rejects a blank service_name and empty allow-lists" do
+  test "credential issuance rejects invalid names, allow-lists, scopes, and expiry" do
     admin = issue([:admin]).token
 
     for body <- [
@@ -423,6 +547,16 @@ defmodule AsnEventBroker.Web.RouterTest do
             "service_name" => "social-api",
             "scopes" => ["publish"],
             "allowed_event_types" => ["NOT.A.TYPE"]
+          },
+          %{
+            "service_name" => "social-api",
+            "scopes" => ["publish"],
+            "expires_at" => DateTime.to_iso8601(DateTime.utc_now() |> DateTime.add(-60))
+          },
+          %{
+            "service_name" => "social-api",
+            "scopes" => ["publish"],
+            "expires_at" => "not-a-timestamp"
           }
         ] do
       conn = call("POST", "/v1/credentials", admin, body)
