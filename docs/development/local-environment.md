@@ -25,7 +25,7 @@ drill before changing the baseline.
 | `4002` | Chat service | Runs when started with `mix phx.server` |
 | `4001` | Social API | Reserved; no manifest |
 | `4003` | Moderation API | Reserved; no manifest |
-| `4004` | Event broker HTTP | Reserved; only if ADR 0008 selects HTTP |
+| `4004` | Event broker HTTP | Runs when started with `mix run --no-halt` |
 | `3000` | Web | Vite dev server (`apps/web`) |
 | `3001` | Admin | Reserved; no manifest |
 
@@ -41,7 +41,12 @@ non-superuser roles. It also creates test databases for the scaffolded services.
 | `moderation_db` | `asn_moderation` | Moderation API |
 | `broker_db` | `asn_broker` | Event broker |
 | `chat_db_test` | `asn_chat` | Chat ExUnit database |
-| `broker_db_test` | `asn_broker` | Broker ExUnit database |
+| `broker_db_test` | `asn_broker` | Broker ExUnit database and dedicated broker E2E database |
+
+The cross-service E2E script uses `broker_db_test` and `chat_db_test`, never the
+development databases. It requires `E2E_ALLOW_DESTRUCTIVE=1` and rejects remote
+or non-test database URLs before making changes. Do not run it concurrently with
+ExUnit against the same test databases.
 
 Rules enforced locally:
 

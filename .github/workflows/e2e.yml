@@ -33,12 +33,12 @@ env:
   POSTGRES_USER: postgres
   POSTGRES_PASSWORD: postgres
   ASN_DB_PASSWORD: postgres
+  E2E_ALLOW_DESTRUCTIVE: '1'
   PGHOST: localhost
   PGUSER: postgres
   PGPASSWORD: postgres
-  E2E_BROKER_DATABASE_URL: postgres://asn_broker:postgres@localhost:5432/broker_db
-  E2E_BROKER_TEST_DATABASE_URL: postgres://asn_broker:postgres@localhost:5432/broker_db_test
-  E2E_CHAT_DATABASE_URL: postgres://asn_chat:postgres@localhost:5432/chat_db
+  E2E_BROKER_DATABASE_URL: postgres://asn_broker:postgres@localhost:5432/broker_db_test
+  E2E_CHAT_DATABASE_URL: postgres://asn_chat:postgres@localhost:5432/chat_db_test
 
 jobs:
   broker-relay:
@@ -99,17 +99,19 @@ jobs:
         working-directory: services/chat-service
         run: mix deps.get
 
+      - name: Check E2E seed formatting
+        working-directory: services/chat-service
+        run: mix format --check-formatted ../../tests/e2e/seed_chat_device.exs
+
+      - name: Verify destructive database guard
+        run: |
+          if E2E_CHAT_DATABASE_URL='postgres://asn_chat:postgres@localhost:5432/chat_db' \
+            bash tests/e2e/broker-relay.sh >"$RUNNER_TEMP/e2e-safety.log" 2>&1; then
+            cat "$RUNNER_TEMP/e2e-safety.log"
+            echo "E2E safety guard unexpectedly allowed a non-test database" >&2
+            exit 1
+          fi
+          grep -q 'database name must end in _test' "$RUNNER_TEMP/e2e-safety.log"
+
       - name: Run the cross-service e2e
         run: bash tests/e2e/broker-relay.sh
-
-      - name: Broker log on failure
-        if: failure()
-        run: |
-          if [ -f /tmp/e2e-broker.log ]; then
-            echo "===== broker log ====="
-            tail -n 200 /tmp/e2e-broker.log
-          fi
-          if [ -f /tmp/e2e-relay.log ]; then
-            echo "===== relay log ====="
-            tail -n 200 /tmp/e2e-relay.log
-          fi
