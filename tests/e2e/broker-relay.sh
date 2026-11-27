@@ -1,136 +1,246 @@
 #!/usr/bin/env bash
 # Cross-service end-to-end: chat outbox relay -> live broker -> claim -> ack.
 #
-# Prerequisites: PostgreSQL reachable via the URLs below (compose or a CI
-# service), both services' dependencies fetched, curl + python3 on PATH.
-# The script owns its lifecycle: migrates, boots the broker, issues a real
-# credential through the admin API, records a chat outbox row, runs the
-# relay, claims the delivery, and asserts the metrics trail.
+# This script is destructive and only accepts loopback PostgreSQL URLs whose
+# database names end in _test. CI and local runs must opt in explicitly.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-# Random port per run: a stale broker from an interrupted run cannot
-# squat it (beam processes do not match pkill by script name).
-PORT="${E2E_BROKER_PORT:-$((4190 + RANDOM % 100))}"
-BASE_URL="http://localhost:${PORT}"
+
+if [ "${E2E_ALLOW_DESTRUCTIVE:-}" != "1" ]; then
+  echo "E2E FAIL: refusing to run without E2E_ALLOW_DESTRUCTIVE=1" >&2
+  exit 1
+fi
+
+BROKER_DATABASE_URL="${E2E_BROKER_DATABASE_URL:-postgres://asn_broker:change_me@localhost:5432/broker_db_test}"
+CHAT_DATABASE_URL="${E2E_CHAT_DATABASE_URL:-postgres://asn_chat:change_me@localhost:5432/chat_db_test}"
+export BROKER_DATABASE_URL CHAT_DATABASE_URL
+
+validate_test_database_url() {
+  local label="$1"
+  local url="$2"
+
+  python3 - "$label" "$url" <<'PY'
+import sys
+from urllib.parse import urlparse
+
+label, raw_url = sys.argv[1], sys.argv[2]
+parsed = urlparse(raw_url)
+host = (parsed.hostname or "").lower()
+database = parsed.path.lstrip("/")
+
+if parsed.scheme not in {"postgres", "postgresql"}:
+    raise SystemExit(f"E2E FAIL: refusing {label}: URL scheme must be postgres")
+if host not in {"localhost", "127.0.0.1", "::1"}:
+    raise SystemExit(f"E2E FAIL: refusing {label}: database host must be loopback")
+if not database.endswith("_test"):
+    raise SystemExit(f"E2E FAIL: refusing {label}: database name must end in _test")
+PY
+}
+
+validate_test_database_url "broker" "$BROKER_DATABASE_URL"
+validate_test_database_url "chat" "$CHAT_DATABASE_URL"
+
+TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/asn-e2e.XXXXXX")"
+BROKER_LOG="$TMP_DIR/broker.log"
+RELAY_LOG="$TMP_DIR/relay.log"
+BROKER_PID=""
+STATE_READY=0
+
+cleanup() {
+  local status=$?
+  trap - EXIT INT TERM
+
+  if [ -n "$BROKER_PID" ] && kill -0 "$BROKER_PID" 2>/dev/null; then
+    kill "$BROKER_PID" 2>/dev/null || true
+    wait "$BROKER_PID" 2>/dev/null || true
+  fi
+
+  if [ "$STATE_READY" = "1" ]; then
+    psql "$BROKER_DATABASE_URL" -q -v ON_ERROR_STOP=1 -c \
+      "TRUNCATE deliveries, subscriptions, service_credentials, audit_log, events CASCADE;" \
+      >/dev/null 2>&1 || true
+    psql "$CHAT_DATABASE_URL" -q -v ON_ERROR_STOP=1 -c \
+      "TRUNCATE chat_devices, chat_users, outbox_events CASCADE;" \
+      >/dev/null 2>&1 || true
+  fi
+
+  if [ "$status" -ne 0 ]; then
+    for log in "$BROKER_LOG" "$RELAY_LOG"; do
+      if [ -s "$log" ]; then
+        echo "===== ${log} =====" >&2
+        tail -n 200 "$log" >&2
+      fi
+    done
+  fi
+
+  rm -rf "$TMP_DIR"
+  exit "$status"
+}
+
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+fail() {
+  echo "E2E FAIL: $*" >&2
+  exit 1
+}
+
+command -v curl >/dev/null 2>&1 || fail "curl is required"
+command -v python3 >/dev/null 2>&1 || fail "python3 is required"
+command -v psql >/dev/null 2>&1 || fail "psql is required"
+
+PORT="${E2E_BROKER_PORT:-$(python3 - <<'PY'
+import socket
+
+with socket.socket() as sock:
+    sock.bind(("127.0.0.1", 0))
+    print(sock.getsockname()[1])
+PY
+)}"
+BASE_URL="http://127.0.0.1:${PORT}"
 ADMIN_TOKEN="e2e-admin-${RANDOM}"
 
-BROKER_DATABASE_URL="${E2E_BROKER_DATABASE_URL:-postgres://asn_broker:change_me@localhost:5432/broker_db}"
-BROKER_TEST_DATABASE_URL="${E2E_BROKER_TEST_DATABASE_URL:-postgres://asn_broker:change_me@localhost:5432/broker_db_test}"
-CHAT_DATABASE_URL="${E2E_CHAT_DATABASE_URL:-postgres://asn_chat:change_me@localhost:5432/chat_db}"
+echo "==> Migrate broker and chat test databases"
+(
+  cd "$REPO_ROOT/services/event-broker"
+  mix ecto.create >/dev/null
+  mix ecto.migrate >/dev/null
+)
+(
+  cd "$REPO_ROOT/services/chat-service"
+  mix ecto.create >/dev/null
+  mix ecto.migrate >/dev/null
+)
 
-# Export, not just assign: `VAR=... cmd1 && cmd2` scopes the variable to cmd1
-# only, so a chained `mix ecto.migrate` would fall back to the config defaults
-# and fail to authenticate whenever the role password is not `change_me`.
-export BROKER_DATABASE_URL BROKER_TEST_DATABASE_URL CHAT_DATABASE_URL
-
-fail() { echo "E2E FAIL: $*" >&2; exit 1; }
-
-BROKER_PID=""
-cleanup() {
-  if [ -n "$BROKER_PID" ]; then
-    kill "$BROKER_PID" 2>/dev/null || true
-  fi
-}
-trap cleanup EXIT
-
-echo "==> Migrate broker and chat databases"
-(cd "$REPO_ROOT/services/event-broker" &&
-  BROKER_DATABASE_URL="$BROKER_DATABASE_URL" BROKER_TEST_DATABASE_URL="$BROKER_TEST_DATABASE_URL" \
-  mix ecto.create >/dev/null && mix ecto.migrate >/dev/null)
-(cd "$REPO_ROOT/services/chat-service" &&
-  CHAT_DATABASE_URL="$CHAT_DATABASE_URL" mix ecto.create >/dev/null && mix ecto.migrate >/dev/null)
-
-echo "==> Reset e2e state (the script owns its lifecycle)"
-psql "$BROKER_DATABASE_URL" -q -c \
+echo "==> Reset dedicated e2e test state"
+psql "$BROKER_DATABASE_URL" -q -v ON_ERROR_STOP=1 -c \
   "TRUNCATE deliveries, subscriptions, service_credentials, audit_log, events CASCADE;" >/dev/null
-psql "$CHAT_DATABASE_URL" -q -c "TRUNCATE outbox_events CASCADE;" >/dev/null
-
-command -v fuser >/dev/null 2>&1 && fuser -k "${PORT}/tcp" >/dev/null 2>&1 || true
+psql "$CHAT_DATABASE_URL" -q -v ON_ERROR_STOP=1 -c \
+  "TRUNCATE chat_devices, chat_users, outbox_events CASCADE;" >/dev/null
+STATE_READY=1
 
 echo "==> Boot the broker on port ${PORT}"
-(cd "$REPO_ROOT/services/event-broker" &&
-  BROKER_DATABASE_URL="$BROKER_DATABASE_URL" \
-  BROKER_ADMIN_TOKEN="$ADMIN_TOKEN" \
-  EVENT_BROKER_PORT="$PORT" \
-  mix run --no-halt >/tmp/e2e-broker.log 2>&1 &
-  echo $! > /tmp/e2e-broker.pid)
-BROKER_PID="$(cat /tmp/e2e-broker.pid)"
+(
+  cd "$REPO_ROOT/services/event-broker"
+  exec env \
+    BROKER_ADMIN_TOKEN="$ADMIN_TOKEN" \
+    EVENT_BROKER_PORT="$PORT" \
+    mix run --no-halt
+) >"$BROKER_LOG" 2>&1 &
+BROKER_PID=$!
 
 for _ in $(seq 1 60); do
-  if curl -sf "$BASE_URL/readyz" >/dev/null 2>&1; then break; fi
+  if curl -sf "$BASE_URL/readyz" >/dev/null 2>&1; then
+    break
+  fi
   sleep 1
 done
-curl -sf "$BASE_URL/readyz" >/dev/null 2>&1 || { cat /tmp/e2e-broker.log >&2; fail "broker did not become ready"; }
+
+curl -sf "$BASE_URL/readyz" >/dev/null 2>&1 || fail "broker did not become ready"
 echo "    broker ready"
 
-echo "==> Issue a real publish+consume credential through the admin API"
+echo "==> Issue an expiring chat-service credential through the admin API"
+EXPIRES_AT="$(python3 - <<'PY'
+from datetime import datetime, timedelta, timezone
+
+expires = datetime.now(timezone.utc) + timedelta(hours=1)
+print(expires.isoformat().replace("+00:00", "Z"))
+PY
+)"
+
 CREDENTIALS_JSON="$(curl -sf -X POST "$BASE_URL/v1/credentials" \
-  -H "Authorization: Bearer $ADMIN_TOKEN" -H "content-type: application/json" \
-  -d '{"service_name":"chat-service","scopes":["publish","consume"]}')"
-PUBLISH_TOKEN="$(echo "$CREDENTIALS_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])')"
-[ -n "$PUBLISH_TOKEN" ] || fail "credential issuance returned no token"
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "content-type: application/json" \
+  --data "$(python3 - "$EXPIRES_AT" <<'PY'
+import json
+import sys
+
+print(json.dumps({
+    "service_name": "chat-service",
+    "scopes": ["publish", "consume"],
+    "expires_at": sys.argv[1],
+}))
+PY
+)")"
+
+SERVICE_TOKEN="$(echo "$CREDENTIALS_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])')"
+[ -n "$SERVICE_TOKEN" ] || fail "credential issuance returned no token"
 
 echo "==> Create the e2e subscription (admin)"
 curl -sf -X POST "$BASE_URL/v1/subscriptions" \
-  -H "Authorization: Bearer $ADMIN_TOKEN" -H "content-type: application/json" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "content-type: application/json" \
   -d '{"name":"e2e-chat-relay","consumer":"chat-service"}' >/dev/null
 
-echo "==> Record an envelope in the chat outbox"
-EVENT_ID="$(python3 -c 'import uuid; print(uuid.uuid4())')"
-(cd "$REPO_ROOT/services/chat-service" &&
-  CHAT_DATABASE_URL="$CHAT_DATABASE_URL" E2E_EVENT_ID="$EVENT_ID" \
-  mix run -e '
-    envelope = %{
-      "event_id" => System.fetch_env!("E2E_EVENT_ID"),
-      "type" => "chat.device.registered",
-      "schema_version" => 1,
-      "occurred_at" => DateTime.utc_now() |> DateTime.to_iso8601(),
-      "aggregate_type" => "conversation",
-      "aggregate_id" => "01912345-6789-7000-8000-0000000000e2",
-      "aggregate_version" => 1,
-      "trace_id" => "e2e",
-      "payload" => %{"device_id" => "e2e-device"}
-    }
-
-    {:ok, _} = AsnChat.Events.Outbox.record(envelope)
-    IO.puts("outbox row recorded")
-  ' >/dev/null)
+echo "==> Register a real Chat device and record its transactional outbox event"
+EVENT_ID="$(
+  cd "$REPO_ROOT/services/chat-service"
+  mix run --no-start "$REPO_ROOT/tests/e2e/seed_chat_device.exs" \
+    | grep '^E2E_EVENT_ID=' \
+    | cut -d= -f2
+)"
+[ -n "$EVENT_ID" ] || fail "Chat device seed did not return an event id"
 
 echo "==> Run the relay (one batch) against the live broker"
-(cd "$REPO_ROOT/services/chat-service" &&
-  CHAT_DATABASE_URL="$CHAT_DATABASE_URL" \
+(
+  cd "$REPO_ROOT/services/chat-service"
   BROKER_BASE_URL="$BASE_URL" \
-  BROKER_SERVICE_TOKEN="$PUBLISH_TOKEN" \
-  mix run -e '
-    {:ok, published} = AsnChat.Events.Relay.publish_batch()
-    IO.puts("PUBLISHED=" <> Enum.join(published, ","))
-  ' >/tmp/e2e-relay.log 2>&1)
-grep -q "^PUBLISHED=" /tmp/e2e-relay.log || { cat /tmp/e2e-relay.log >&2; fail "relay produced no result"; }
-PUBLISHED="$(grep -o 'PUBLISHED=.*' /tmp/e2e-relay.log | cut -d= -f2)"
+  BROKER_SERVICE_TOKEN="$SERVICE_TOKEN" \
+    mix run --no-start -e '
+      {:ok, _started} = Application.ensure_all_started(:ecto_sql)
+      {:ok, _repo} = AsnChat.Repo.start_link()
+      {:ok, published} = AsnChat.Events.Relay.publish_batch()
+      IO.puts("PUBLISHED=" <> Enum.join(published, ","))
+    ' >"$RELAY_LOG" 2>&1
+)
+
+grep -q "^PUBLISHED=" "$RELAY_LOG" || fail "relay produced no result"
+PUBLISHED="$(grep -o 'PUBLISHED=.*' "$RELAY_LOG" | cut -d= -f2)"
 [ "$PUBLISHED" = "$EVENT_ID" ] || fail "relay published [$PUBLISHED], expected [$EVENT_ID]"
 
-echo "==> Claim the delivery as a consumer"
+echo "==> Claim the delivery as the owning consumer service"
 CLAIM_JSON="$(curl -sf -X POST "$BASE_URL/v1/subscriptions/e2e-chat-relay/claims" \
-  -H "Authorization: Bearer $PUBLISH_TOKEN" -H "content-type: application/json" \
+  -H "Authorization: Bearer $SERVICE_TOKEN" \
+  -H "content-type: application/json" \
   -d '{"max": 10, "wait_ms": 0}')"
-echo "$CLAIM_JSON" | python3 -c '
-import json, sys
-data = json.load(sys.stdin)
+
+CLAIM_JSON="$CLAIM_JSON" EXPECTED_EVENT_ID="$EVENT_ID" python3 - <<'PY'
+import json
+import os
+import uuid
+
+expected_event_id = os.environ["EXPECTED_EVENT_ID"]
+assert uuid.UUID(expected_event_id).version == 7, expected_event_id
+data = json.loads(os.environ["CLAIM_JSON"])
 deliveries = data["deliveries"]
 assert len(deliveries) == 1, f"expected exactly one delivery, got {len(deliveries)}"
-d = deliveries[0]
-assert d["type"] == "chat.device.registered", d["type"]
-assert d["payload"]["device_id"] == "e2e-device"
-assert d["lease_token"], "missing lease token"
-print("claimed", d["delivery_id"], "with envelope intact")
-' || fail "claim assertion failed"
+delivery = deliveries[0]
+assert delivery["event_id"] == expected_event_id, delivery["event_id"]
+assert delivery["type"] == "chat.device.registered", delivery["type"]
+assert delivery["aggregate_type"] == "device", delivery["aggregate_type"]
+assert delivery["aggregate_id"] == delivery["payload"]["device_id"]
+assert set(delivery["payload"]) == {
+    "device_id",
+    "user_id",
+    "platform",
+    "identity_key_fingerprint",
+}
+assert delivery["payload"]["user_id"]
+assert delivery["payload"]["platform"] == "web"
+assert delivery["payload"]["identity_key_fingerprint"]
+assert delivery["lease_token"], "missing lease token"
+print("claimed", delivery["delivery_id"], "with a contract-valid device envelope")
+PY
 
-echo "==> Ack it"
 DELIVERY_ID="$(echo "$CLAIM_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin)["deliveries"][0]["delivery_id"])')"
 LEASE_TOKEN="$(echo "$CLAIM_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin)["deliveries"][0]["lease_token"])')"
+
+echo "==> Ack it"
 curl -sf -X POST "$BASE_URL/v1/deliveries/$DELIVERY_ID/ack" \
-  -H "Authorization: Bearer $PUBLISH_TOKEN" -H "content-type: application/json" \
+  -H "Authorization: Bearer $SERVICE_TOKEN" \
+  -H "content-type: application/json" \
   -d "{\"lease_token\": \"$LEASE_TOKEN\"}" >/dev/null
 
 echo "==> Metrics show the loop"
@@ -139,4 +249,4 @@ echo "$METRICS" | grep -q 'asn_event_broker_publish_accepted_total' || fail "met
 echo "$METRICS" | grep -q 'asn_event_broker_acks_total' || fail "metrics missing ack counter"
 
 echo ""
-echo "E2E PASS: chat outbox -> relay -> broker -> claim -> ack -> metrics"
+echo "E2E PASS: chat device outbox -> relay -> broker -> owning consumer -> ack -> metrics"

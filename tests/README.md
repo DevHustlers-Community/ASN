@@ -24,11 +24,21 @@ Tests that no single service can own alone.
 ## Cross-service end-to-end
 
 [`e2e/broker-relay.sh`](e2e/broker-relay.sh) runs the full event loop against
-live processes: it migrates both databases, boots the broker, issues a real
-credential through the admin API, records a chat outbox row, runs the relay,
-claims and acknowledges the delivery, and checks the metrics trail. It resets
-its own state and picks a random port, so reruns are safe. Prerequisites:
-compose PostgreSQL up and both services' dependencies fetched.
+live processes: it migrates dedicated test databases, boots the broker, issues
+an expiring `chat-service` credential through the admin API, registers a real
+Chat device through the devices context, runs the relay, claims and acknowledges
+the delivery as the owning consumer service, and checks the metrics trail.
 
-**Status:** the happy path is implemented and runs in CI. The failure-path cases
-listed above are still to be added to this folder.
+The script is destructive and requires `E2E_ALLOW_DESTRUCTIVE=1`. It refuses
+non-loopback database URLs and database names that do not end in `_test` before
+running migrations or truncating state. It uses a per-run temporary directory,
+never kills unrelated listeners, and prints service logs on failure.
+Prerequisites: compose PostgreSQL up and both services' dependencies fetched.
+
+```bash
+E2E_ALLOW_DESTRUCTIVE=1 bash tests/e2e/broker-relay.sh
+```
+
+**Status:** the happy path is implemented and runs in CI, including a negative
+safety check for non-test database URLs. The failure-path cases listed above are
+still to be added to this folder.
