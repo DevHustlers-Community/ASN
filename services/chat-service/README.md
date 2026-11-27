@@ -43,7 +43,7 @@ devices, and chat streaks.
 |---|---|
 | Elixir / OTP | 1.20.4 / 29.1.2, pinned in [`.tool-versions`](../../.tool-versions) |
 | Phoenix | 1.8.17, API-only (`--no-html`, `--no-assets`, `--no-live`) |
-| HTTP adapter | Bandit 1.13.1 |
+| HTTP adapter | Bandit 1.15.0 |
 | Persistence | Ecto 3.14 / Ecto SQL 3.14 / Postgrex 0.22 |
 | Database | PostgreSQL 18.6 locally via [`compose.yaml`](../../compose.yaml) |
 
@@ -87,7 +87,7 @@ the status of each context.
 | `crypto/` | Planned | Protocol state, key rotation triggers, envelope validation helpers |
 | `blocks/` | Planned | `chat_block_edges` projection and fail-closed checks |
 | `delivery/` | Planned | Channel fan-out, push, presence |
-| `events/` | Implemented | Outbox writer, publishers, consumers |
+| `events/` | Implemented | Outbox writer, envelope rebuild, publisher relay; projection consumers planned |
 
 Context directories are created when their first implementation lands. Do not add
 empty placeholder directories.
