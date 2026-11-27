@@ -1,0 +1,14 @@
+{
+  "event_id": "0190f1e2-6d7e-7f80-b192-3d4e5f607183",
+  "type": "user.created",
+  "schema_version": 1,
+  "occurred_at": "2026-11-27T12:00:00.000000Z",
+  "aggregate_type": "user",
+  "aggregate_id": "0190f1e2-6d7e-7f80-b192-3d4e5f607182",
+  "aggregate_version": 1,
+  "payload": {
+    "user_id": "0190f1e2-6d7e-7f80-b192-3d4e5f607182",
+    "username": "asn-user",
+    "display_name": "ASN User"
+  }
+}

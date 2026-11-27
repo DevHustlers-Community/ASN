@@ -6,7 +6,7 @@ and publishes domain events through its transactional outbox.
 
 | Service | Runtime | Database | Purpose |
 |---|---|---|---|
-| [`social-api/`](social-api/README.md) | Bun + TypeScript | `social_db` | Accounts, content, communities, feed |
+| [`social-api/`](social-api/README.md) | Elixir + Phoenix API-only + Ecto | `social_db` | Accounts, content, communities, feed |
 | [`chat-service/`](chat-service/README.md) | Elixir + Phoenix | `chat_db` | Conversations, encrypted messages, devices |
 | [`moderation-api/`](moderation-api/README.md) | Bun + TypeScript | `moderation_db` | Reports, cases, appeals, audit |
 | [`event-broker/`](event-broker/README.md) | Elixir/OTP + Ecto | `broker_db` | Durable event delivery |
@@ -30,6 +30,6 @@ and publishes domain events through its transactional outbox.
 
 Each service README documents its own setup. Shared dependencies (PostgreSQL,
 object storage, proxy) are described in
-[`infrastructure/`](../infrastructure/README.md). The Chat and broker scaffolds
-run against local PostgreSQL; their contract-first health endpoints land with the
-first API contract.
+[`infrastructure/`](../infrastructure/README.md). The Social, Chat, and broker
+services run against local PostgreSQL; their contract-first health endpoints are
+documented in each service README.

@@ -52,6 +52,7 @@ jobs:
         service:
           - services/event-broker
           - services/chat-service
+          - services/social-api
 
     steps:
       - name: Check out repository

@@ -7,6 +7,7 @@
 | [`workflows/web.yml`](workflows/web.yml) | Web client: typecheck, tests, and build under Bun |
 | [`workflows/broker.yml`](workflows/broker.yml) | Event broker: format, compile with warnings as errors, and tests on disposable PostgreSQL 18 |
 | [`workflows/chat.yml`](workflows/chat.yml) | Chat service: format, compile with warnings as errors, and tests on disposable PostgreSQL 18 |
+| [`workflows/social.yml`](workflows/social.yml) | Social API: format, compile with warnings as errors, and tests on disposable PostgreSQL 18 |
 | [`workflows/e2e.yml`](workflows/e2e.yml) | Cross-service e2e: chat outbox → relay → broker publish → claim → ack → `/metrics`, on disposable PostgreSQL 18 |
 | [`workflows/security.yml`](workflows/security.yml) | Secret scanning with gitleaks and dependency audits (`bun audit`, `mix hex.audit`): pull requests, `main`, and a weekly schedule |
 | [`ISSUE_TEMPLATE/`](ISSUE_TEMPLATE/) | Bug, feature, and ADR-request forms |
@@ -22,7 +23,7 @@
 - Relative documentation links resolve.
 - Pull request commits and the full history on `main` are scanned for secrets
   with gitleaks, and dependency advisories fail the build for the Bun workspace
-  and both Elixir services (see
+  and all three Elixir services (see
   [`workflows/security.yml`](workflows/security.yml)). A weekly scheduled run
   catches advisories disclosed without a code change.
 - OpenAPI documents and event schemas are validated, and a pull request that
@@ -52,6 +53,6 @@
   a code label.
 
 **Status:** governance automation, contract validation, and the web, broker,
-chat, cross-service e2e, and security workflows are written. Remaining service
-workflows (Social, Moderation) land with their first manifests;
-client-generation drift checks land with the contracts tooling.
+chat, Social, cross-service e2e, and security workflows are written. The
+Moderation workflow lands with its first manifest; client-generation drift
+checks land with the contracts tooling.

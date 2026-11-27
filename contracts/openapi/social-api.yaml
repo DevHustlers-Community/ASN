@@ -1,0 +1,129 @@
+openapi: 3.1.0
+info:
+  title: ASN Social API
+  version: 1.0.0
+  description: >
+    Internal Social authorization and health endpoints for the first Elixir
+    vertical slice. Public Social resource APIs will be added additively.
+servers:
+  - url: /
+tags:
+  - name: health
+  - name: internal
+paths:
+  /healthz:
+    get:
+      tags: [health]
+      operationId: health
+      summary: Liveness
+      security: []
+      responses:
+        '200':
+          description: Process is up.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: { type: string, const: up }
+  /readyz:
+    get:
+      tags: [health]
+      operationId: ready
+      summary: Readiness (database reachable)
+      security: []
+      responses:
+        '200':
+          description: Ready.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: { type: string, const: ready }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+  /internal/v1/users/{user_id}/authorization:
+    get:
+      tags: [internal]
+      operationId: getUserAuthorization
+      summary: Read authoritative account status and session cutoff
+      description: >
+        Requires an Auth0 M2M token with the Social audience and the
+        social:authorization:read scope. Unknown and cross-service resources are
+        not exposed through this endpoint.
+      security:
+        - socialM2M: []
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: Current account authorization state.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthorizationView' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+components:
+  securitySchemes:
+    socialM2M:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >
+        Auth0 M2M JWT with the Social API audience and the
+        social:authorization:read scope. User access tokens are not accepted.
+  parameters:
+    UserId:
+      name: user_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  schemas:
+    AuthorizationView:
+      type: object
+      additionalProperties: false
+      required: [user_id, status, sessions_valid_after]
+      properties:
+        user_id: { type: string, format: uuid }
+        status:
+          type: string
+          enum: [active, suspended, banned, pending_deletion]
+        sessions_valid_after:
+          type: [string, 'null']
+          format: date-time
+    Problem:
+      type: object
+      description: RFC 9457 Problem Details with a stable Social error code.
+      required: [type, title, status, code, request_id]
+      properties:
+        type: { type: string }
+        title: { type: string }
+        status: { type: integer }
+        code: { type: string }
+        detail: { type: string }
+        request_id: { type: string }
+  responses:
+    Unauthorized:
+      description: Missing, invalid, or expired M2M token.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Forbidden:
+      description: Token lacks the required scope.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    NotFound:
+      description: Unknown user.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    ServiceUnavailable:
+      description: A required dependency, such as JWKS or PostgreSQL, is unavailable.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }

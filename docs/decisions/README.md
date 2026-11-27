@@ -42,13 +42,14 @@ Every significant, hard-to-reverse decision gets one numbered ADR.
 | [0015](0015-outbox-event-storage.md) | Outbox event storage columns | accepted |
 | [0016](0016-rest-authentication-and-request-policy.md) | REST authentication and request policy | accepted |
 | [0017](0017-keypackage-storage-before-library-gate.md) | KeyPackage storage before the client library gate | accepted |
+| [0018](0018-social-api-elixir-phoenix-ecto.md) | Social API runtime: Elixir, Phoenix API-only, and Ecto | accepted |
 
 **Planned ADRs:**
 
 | ID | Subject |
 |---|---|
 | 0001 | Monorepo layout and ownership boundaries |
-| 0002 | Bun + TypeScript for Social and Moderation APIs |
+| 0002 | Bun + TypeScript for the Moderation API; Social portion superseded by ADR 0018 |
 | 0003 | Elixir/Phoenix for the Chat service |
 | 0004 | Custom Elixir/OTP event broker instead of an off-the-shelf broker |
 | 0005 | PostgreSQL as first broker storage |
@@ -56,8 +57,9 @@ Every significant, hard-to-reverse decision gets one numbered ADR.
 | 0009 | Opaque envelope contract from day one |
 | 0010 | Web E2EE parity policy |
 
-**Status:** 0007, 0008, 0011, 0015, 0016 and 0017 are accepted. 0012 and 0014
-are proposed. 0001-0006 are effectively settled by the architecture document
-and should be recorded next. 0009 and 0010 remain open. ADR 0017 amends only the
+**Status:** 0007, 0008, 0011, 0015, 0016, 0017 and 0018 are accepted. 0012 and
+0014 are proposed. 0001-0006 are effectively settled by the architecture document
+and should be recorded next, except that ADR 0018 supersedes the Social API
+portion of planned ADR 0002. 0009 and 0010 remain open. ADR 0017 amends only the
 `device_key_packages` row of ADR 0007; its MLS selection stays accepted.
 

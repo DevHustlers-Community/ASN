@@ -35,8 +35,9 @@ events/
 
 **Status:** the envelope schema and its valid/invalid examples have landed
 ([`common/event-envelope.schema.json`](common/event-envelope.schema.json),
-[`examples/`](examples/README.md)), and the first Chat v1 payload schemas have
-landed under [`chat/`](chat/) (`chat.device.registered`,
+[`examples/`](examples/README.md)), the first Social v1 payload schema has landed
+under [`social/`](social/) (`user.created`), and the first Chat v1 payload schemas
+have landed under [`chat/`](chat/) (`chat.device.registered`,
 `chat.device.revoked`, `chat.conversation.created`, `chat.message.created`).
 Per-event payload schemas land before their producers are implemented.
 
