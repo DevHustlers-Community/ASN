@@ -1,13 +1,14 @@
 # Elixir service conventions
 
-The Chat service and the Event broker are independent OTP applications. They share
-runtime conventions, not code, databases, or domain models.
+The Chat service, Social API, and Event broker are independent OTP applications.
+They share runtime conventions, not code, databases, or domain models.
 
 ## Naming
 
 | Service | Folder | OTP app | Root module | Web module |
 |---|---|---|---|---|
 | Chat | `services/chat-service` | `:asn_chat` | `AsnChat` | `AsnChatWeb` |
+| Social | `services/social-api` | `:asn_social` | `AsnSocial` | `AsnSocialWeb` |
 | Event broker | `services/event-broker` | `:asn_event_broker` | `AsnEventBroker` | none |
 
 Use the OTP app name, not the folder name, in configuration and commands. Folder
@@ -19,8 +20,8 @@ names stay descriptive for humans; module names stay short and stable.
 |---|---|
 | Elixir | 1.20.4 |
 | OTP | 29.1.2 |
-| Phoenix | 1.8.17 (Chat only) |
-| Bandit | 1.13.1 (Chat only) |
+| Phoenix | 1.8.17 (Chat and Social) |
+| Bandit | 1.15 (Chat, Social, and broker HTTP edge) |
 | Ecto / Ecto SQL | 3.14 |
 | Postgrex | 0.22 |
 | PostgreSQL | 18.6 local baseline |
@@ -47,22 +48,32 @@ services/<service>/
 ├── priv/repo/migrations/
 ├── test/
 │   ├── support/
-│   └── <app>_web/          # Chat only
+│   └── <app>_web/          # Chat and Social
 └── mix.exs
 ```
 
-The broker has no web directory. The Chat web layer lives in `lib/asn_chat_web/`.
-Domain contexts live in `lib/asn_chat/`; they never import web code.
+The broker has no Phoenix web directory. Chat uses `lib/asn_chat_web/`; Social
+uses `lib/asn_social_web/` for API-only controllers, plugs, and JSON responses.
+Domain contexts live under each service's root module and never import web code.
 
-## Web layer rules (Chat)
+## Web layer rules (Chat and Social)
 
 - `router.ex` registers routes and pipelines only.
 - Controllers validate input shape and map context results to responses.
-- Channels handle connection, authorization, and live event framing only.
-- Business rules, sequence allocation, membership checks, and envelope validation
-  belong in contexts.
-- Do not render HTML. The endpoint is JSON-only.
+- Chat channels handle connection, authorization, and live event framing only.
+- Business rules, sequence allocation, membership checks, authorization, and
+  envelope validation belong in contexts.
+- Do not render HTML. The endpoints are JSON-only.
 - Do not add LiveView, a dashboard, or an asset pipeline without an ADR.
+
+## Social query rules
+
+- Follow ADR 0018: keyset pagination, bounded selects, explicit indexes, and
+  query-plan evidence for critical paths.
+- Avoid N+1 queries and unbounded list reads.
+- Separate feed candidate selection from ranking and benchmark both stages.
+- Do not add a cache, search engine, queue, or partitioning scheme before
+  measurements justify it and an ADR accepts the new technology.
 
 ## OTP rules
 
@@ -72,15 +83,15 @@ Domain contexts live in `lib/asn_chat/`; they never import web code.
   transaction on the conversation row.
 - Outbox writers and consumers are supervised processes; they do not block
   request handling.
-- The broker has no HTTP listener until ADR 0008. Transport code must not leak
-  into storage, routing, or delivery.
+- The broker's Plug/Bandit adapter implements ADR 0008. Transport code must not
+  leak into storage, routing, or delivery.
 
 ## Configuration
 
 - `config/config.exs` holds compile-time configuration shared by environments.
 - `config/dev.exs`, `test.exs`, and `prod.exs` hold environment overrides.
 - `config/runtime.exs` reads deployment secrets and URLs at boot.
-- Service-specific environment variables are prefixed with `CHAT_` or `BROKER_`.
+- Service-specific environment variables are prefixed with `SOCIAL_`, `CHAT_`, or `BROKER_`.
 - Never put production secrets in a config file or in `.env.example`.
 - Dev and test fallbacks must be clearly non-production placeholders.
 

@@ -16,15 +16,19 @@ Status is tracked here; completed items move to the changelog.
 - [x] Broker consumer-service authorization, credential expiry, subscription-create audit, and database-clock lease backoff
 - [x] Chat KeyPackage **upload** ([ADR 0017](docs/decisions/0017-keypackage-storage-before-library-gate.md)): `device_key_packages` table, opaque upload endpoint, digest uniqueness, and device-owned listing. Claim is deferred.
 - [x] Cross-service E2E hardening: dedicated test databases, destructive-operation guards, and a contract-valid event from the real Chat devices context
+- [x] Social API runtime decision ([ADR 0018](docs/decisions/0018-social-api-elixir-phoenix-ecto.md)): Elixir + Phoenix API-only + Ecto with a performance/query-optimization contract
+- [x] Social API internal slice: users/account status, M2M-protected authorization endpoint, transactional outbox, and `user.created` event
 
 ## Next (recommended order)
 
-1. [ ] **Chat KeyPackage claim** — atomic one-time claim and concurrency tests, after `blocks/` enforces block/ban status on upload and claim and service-level rate limiting exists ([ADR 0017](docs/decisions/0017-keypackage-storage-before-library-gate.md) follow-up). Upload already landed.
-2. [ ] **Chat conversations and messages** — conversation/membership contexts, per-conversation sequence issuance, opaque envelope send/history, and read cursors against the existing contract.
-3. [ ] **TypeScript service stack ADR** (§9.2) — HTTP framework, query layer, validation, and migration tooling — then Social API scaffolding and `user.*` events for the `chat_users` projection.
-4. [ ] **Moderation API scaffolding** after the TypeScript stack ADR.
-5. [ ] **API client generation** — generator ADR, generated `packages/api-client`, CI drift check, then Web API integration.
-6. [ ] **Extend the e2e harness** with duplicate, out-of-order, broker restart, and consumer-lag cases.
+1. [ ] **Social account provisioning and event relay** — Auth0 Action/provisioning contract, remaining `user.*` events, and the Social outbox relay.
+2. [ ] **Chat production authorization and projection consumer** — short-lived M2M token provider plus idempotent `user.*` consumption into `chat_users`, with Social → broker → Chat integration tests.
+3. [ ] **Chat abuse controls and block propagation** — service-level rate limits, device quotas, a block/ban propagation ADR, Social block events, and the Chat `blocks/` projection.
+4. [ ] **Chat KeyPackage claim** — atomic one-time claim and concurrency tests after `blocks/` and rate limiting exist ([ADR 0017](docs/decisions/0017-keypackage-storage-before-library-gate.md)).
+5. [ ] **Chat friendships, privacy, conversations, and messages** — deterministic direct conversations, per-conversation sequence issuance, opaque envelope send/history, and read cursors.
+6. [ ] **Moderation TypeScript service stack ADR and scaffold** — the remaining Bun/TypeScript backend decision.
+7. [ ] **API client generation** — generator ADR, generated `packages/api-client`, CI drift check, then Web API integration.
+8. [ ] **Extend the e2e harness** with duplicate, out-of-order, broker restart, and consumer-lag cases.
 
 ## Open decisions (ADR required before implementation)
 
@@ -32,6 +36,7 @@ See `docs/architecture/architecture-and-schema.md` §9 and `AGENTS.md` §10:
 - E2EE client library gate (MLS is selected by ADR 0007; Signal/Sesame is the fallback)
 - Web E2EE parity timing
 - Broker partitioning/scaling thresholds
+- Moderation TypeScript HTTP framework, query layer, validation, and migration tooling
 - Authorization propagation after blocks, bans, and removals
 - Device identity verification and revocation propagation
 - Group key rotation / pre-join history (ADR 0014 proposed)

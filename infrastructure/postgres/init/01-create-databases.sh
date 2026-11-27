@@ -48,3 +48,4 @@ create_database broker_db asn_broker
 
 create_database chat_db_test asn_chat
 create_database broker_db_test asn_broker
+create_database social_db_test asn_social

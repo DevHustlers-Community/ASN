@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "social/user.created.v1.schema.json",
+  "title": "user.created payload (v1)",
+  "description": "Emitted when Social creates an account. Envelope contract: aggregate_type 'user', aggregate_id 'user_id', aggregate_version 1. Only public profile projection fields are included; auth0_sub and private identity data never appear.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "user_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "username": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 30
+    },
+    "display_name": {
+      "type": "string",
+      "maxLength": 80
+    },
+    "avatar_key": {
+      "type": "string"
+    }
+  },
+  "required": ["user_id", "username"],
+  "examples": [
+    {
+      "user_id": "0190f1e2-6d7e-7f80-b192-3d4e5f607182",
+      "username": "asn-user",
+      "display_name": "ASN User",
+      "avatar_key": "pub/0190f1e2-6d7e-7f80-b192-3d4e5f607182/2026/11/avatar.webp"
+    }
+  ]
+}

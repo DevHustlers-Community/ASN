@@ -3,13 +3,14 @@
 An open-source social platform for conversations, communities, and real-time
 communication.
 
-> Status: architecture and incremental service scaffolding. The Chat and Event
-> broker apps compile and run locally against PostgreSQL 18. Chat currently
-> exposes authenticated device and KeyPackage operations; conversations and
-> messages remain contract-only. The event-broker OpenAPI contract, shared event
-> envelope, and broker/chat migrations exist. Social and Moderation APIs, mobile,
-> admin, and generated clients are not implemented yet. The current design is
-> documented in
+> Status: architecture and incremental service scaffolding. The Social, Chat,
+> and Event broker apps compile and run locally against PostgreSQL 18. Social
+> exposes the internal account-authorization endpoint and writes `user.created`
+> outbox events. Chat exposes authenticated device and KeyPackage operations;
+> conversations and messages remain contract-only. The event-broker OpenAPI
+> contract, shared event envelope, and service migrations exist. Moderation,
+> mobile, admin, and generated clients are not implemented yet. The current
+> design is documented in
 > [`docs/architecture/architecture-and-schema.md`](docs/architecture/architecture-and-schema.md).
 
 ## Roadmap
@@ -20,7 +21,7 @@ See [`ROADMAP.md`](ROADMAP.md) for the working roadmap, completed work, and next
 
 | Layer | Technology |
 |---|---|
-| Social API | Bun + TypeScript |
+| Social API | Elixir + Phoenix API-only + Ecto |
 | Chat service | Elixir + Phoenix + Ecto |
 | Moderation API | Bun + TypeScript |
 | Event broker | Elixir/OTP + Ecto, PostgreSQL-backed (custom, no external broker) |

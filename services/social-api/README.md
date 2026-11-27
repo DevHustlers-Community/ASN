@@ -1,41 +1,136 @@
 # Social API
 
-Bun + TypeScript REST API that owns `social_db`.
+Elixir + Phoenix API-only + Ecto service that owns `social_db`.
 
-**Owns:** accounts and identity mapping, profiles, privacy settings, follows,
-platform-wide blocks, posts, media metadata, comments, likes, reposts, hashtags,
-feed inputs and ranking, articles and revisions, communities and roles, channel
-metadata, notifications, plans/subscriptions/feature flags, account deletion
-workflow, activity calendar and login streaks.
+**Status:** the first internal slice is implemented under
+[ADR 0018](../../docs/decisions/0018-social-api-elixir-phoenix-ecto.md): users and
+account status, the M2M-protected authorization endpoint required by Chat,
+transactional outbox storage, and the `user.created` event. Public Social
+resource APIs, account provisioning, remaining `user.*` events, and the outbox
+relay are follow-ups.
 
-**Does not own:** friendships, conversations, messages, chat devices, reports,
-cases, or the event log.
+## Owns
 
-**Planned layout (`src/`):**
+- Accounts and Auth0 identity mapping.
+- Profiles and privacy settings.
+- Follows and platform-wide blocks.
+- Posts, media metadata, comments, likes, reposts, and hashtags.
+- Feed inputs, candidate selection, and ranking.
+- Articles and revisions.
+- Communities, roles, channels, invites, and community reports.
+- Notifications, plans, subscriptions, feature flags, and account deletion.
+- Activity calendar and login streaks.
 
-| Path | Purpose |
-|---|---|
-| `app.ts`, `server.ts` | Application assembly and process entry |
-| `config/` | Environment and settings parsing (fail fast) |
-| `modules/` | auth, users, profiles, relationships, posts, comments, reactions, feed, communities, hashtags, search, subscriptions, notifications, reports |
-| `events/` | Outbox writer, publishers, consumers |
-| `infrastructure/` | Database, broker client, object storage, cache, logging |
-| `middleware/` | Auth, request ID, validation, error mapping |
+## Does not own
 
-**Module shape:** `routes.ts`, `controller.ts`, `service.ts`, `repository.ts`,
-`schemas.ts`, optional `policies.ts` and `errors.ts`. Keep business rules in the
-service layer, never in route handlers.
+- Friendships, conversations, messages, or chat devices.
+- Moderation reports, cases, appeals, or staff audit logs.
+- The event log or any other service's database.
 
-**Boundaries:**
+## Runtime and layout
 
-- Emits `user.*`, `community.*`, `channel.*`, `member.*`, `subscription.*`
-  events; consumes `friendship.*` for `friend_edges`.
-- Never reads `chat_db`, `moderation_db`, or `broker_db`.
+- Elixir 1.20.4 / OTP 29.1.2.
+- Phoenix 1.8.17 in API-only mode: no HTML, LiveView, or asset pipeline.
+- Ecto 3.14 / Postgrex 0.22.
+- PostgreSQL 18.6 locally.
+- Bandit 1.15.
+- OTP application `:asn_social`; root module `AsnSocial`; web module
+  `AsnSocialWeb`.
+
+Layout:
+
+```text
+services/social-api/
+├── config/
+├── lib/
+│   ├── asn_social/
+│   │   ├── application.ex
+│   │   ├── repo.ex
+│   │   └── <context>/
+│   └── asn_social_web/
+├── priv/repo/migrations/
+├── test/
+└── mix.exs
+```
+
+Domain contexts own business rules, authorization, transactions, and queries.
+Controllers map HTTP to context calls and remain thin.
+
+## Boundaries
+
+- REST only, documented in `contracts/openapi/social-api.yaml`.
+- Emits `user.*`, `community.*`, `channel.*`, `member.*`, and
+  `subscription.*` events; consumes `friendship.*` for `friend_edges`.
+- Never reads or writes `chat_db`, `moderation_db`, or `broker_db`.
+- Business changes and outbox events commit in the same `social_db` transaction.
 - Private community content never reaches public feeds, search, trends,
-  notifications, or global reposts - enforce through one visibility policy.
+  notifications, or global reposts; enforce one visibility policy at every read
+  and materialization boundary.
 
-**Tests:** unit (`tests/unit`), integration with a real PostgreSQL instance
-(`tests/integration`), OpenAPI contract tests (`tests/contract`).
+## Performance and query rules
 
-**Status:** not scaffolded. HTTP framework, query layer, and migration tool are
-open ADR decisions.
+ADR 0018 makes query optimization a service contract:
+
+- Keyset/cursor pagination with bounded page sizes for feeds, timelines, search,
+  and other large or volatile collections.
+- Select only required columns and return minimal DTOs; avoid loading large text,
+  JSON, or binary fields for list endpoints.
+- Add indexes with the migration that introduces each critical access path and
+  verify them with query plans on representative data volumes.
+- Prevent N+1 queries with explicit joins or batched preloads; measure row
+  multiplication before choosing a strategy.
+- Separate feed candidate selection from ranking; begin with bounded SQL
+  candidate queries and benchmark before adding infrastructure.
+- Keep counters asynchronously maintained and rebuildable.
+- Configure bounded pools, query/request timeouts, and telemetry for query
+  duration, pool queue time, errors, and endpoint latency.
+- Record throughput, p95/p99 latency, CPU, memory, and query-plan evidence before
+  changing partitioning or scaling strategy.
+
+## Implemented internal slice
+
+1. Phoenix API-only/Ecto application with CI.
+2. `social_db` users/account-status migration, constraints, and indexes.
+3. Social OpenAPI contract for health/readiness and M2M-protected authorization.
+4. Auth0 JWT/M2M verification with JWKS rotation and scope enforcement.
+5. Transactional outbox storage and the `user.created` payload contract.
+6. Real-PostgreSQL tests for account creation, atomic outbox writes, API
+   authorization, and the authorization primary-key query plan.
+
+## Local development
+
+```bash
+mix deps.get
+mix ecto.setup
+mix phx.server
+```
+
+The API listens on `http://localhost:4001`. Development uses a gitignored local
+RSA key. Mint an M2M token for Chat with:
+
+```bash
+mix asn_social.dev_token --client-id chat-service
+```
+
+Production requires `SOCIAL_DATABASE_URL`, `SECRET_KEY_BASE`, and the
+`ASN_SOCIAL_AUTH_*` issuer/audience/JWKS configuration. Missing JWKS fails closed.
+
+## Follow-ups
+
+- Auth0 Action/account-provisioning contract.
+- Remaining `user.*` lifecycle events and aggregate-version handling.
+- Social outbox relay to the custom broker.
+- Social → broker → Chat projection E2E.
+
+## Tests
+
+Run from the service directory:
+
+```bash
+mix format --check-formatted
+mix compile --warnings-as-errors
+mix test
+```
+
+Database tests use a real PostgreSQL instance and Ecto Sandbox. Critical query
+paths also require index/query-plan tests and feed/timeline load tests.

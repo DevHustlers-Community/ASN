@@ -42,6 +42,7 @@ non-superuser roles. It also creates test databases for the scaffolded services.
 | `broker_db` | `asn_broker` | Event broker |
 | `chat_db_test` | `asn_chat` | Chat ExUnit database |
 | `broker_db_test` | `asn_broker` | Broker ExUnit database and dedicated broker E2E database |
+| `social_db_test` | `asn_social` | Social ExUnit database |
 
 The cross-service E2E script uses `broker_db_test` and `chat_db_test`, never the
 development databases. It requires `E2E_ALLOW_DESTRUCTIVE=1` and rejects remote
@@ -74,17 +75,19 @@ cp .env.example .env
 | `ASN_DB_PASSWORD` | Password assigned to all local service roles |
 | `POSTGRES_PORT` | Host port for PostgreSQL, default `5432` |
 | `SOCIAL_DATABASE_URL` | Social API connection URL |
+| `SOCIAL_TEST_DATABASE_URL` | Social test connection URL |
 | `CHAT_DATABASE_URL` | Chat service connection URL |
 | `MODERATION_DATABASE_URL` | Moderation API connection URL |
 | `BROKER_DATABASE_URL` | Event broker connection URL |
 | `CHAT_TEST_DATABASE_URL` | Chat test connection URL |
 | `BROKER_TEST_DATABASE_URL` | Broker test connection URL |
+| `SOCIAL_API_PORT` | Social HTTP port, default `4001` |
 | `CHAT_SERVICE_PORT` | Chat HTTP port, default `4002` |
-| `SECRET_KEY_BASE` | Chat signing secret; required in production |
+| `SECRET_KEY_BASE` | Elixir signing secret; required in production |
 
 `.env` is ignored by Git. Do not put real credentials in `.env.example`, service
 config, tests, or documentation. If you change `ASN_DB_PASSWORD`, update the four
-service URLs and the two test URLs to match.
+service URLs and the three test URLs to match.
 
 ## Compose lifecycle
 

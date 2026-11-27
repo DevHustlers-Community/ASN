@@ -9,13 +9,15 @@ tool that reads `AGENTS.md` gets the same rules.
 ASN (Arabian Social Network) is an open-source social platform with posts,
 communities, real-time chat, and end-to-end encrypted messaging.
 
-**Current state:** architecture and incremental service scaffolding. The Chat
-service and Event broker have Elixir manifests, pin Elixir 1.20.4/OTP 29.1.2,
-compile, and run against PostgreSQL 18.6. The web client (apps/web) and shared
-TypeScript presets (packages/config-typescript) are scaffolded under Bun 1.4.4.
-The event-broker OpenAPI contract, the shared event envelope, and the
-broker/chat migrations are in place. There are no product endpoints or backend
-TypeScript service manifests yet. Do not assume a product feature is runnable.
+**Current state:** architecture and incremental service scaffolding. The Social,
+Chat, and Event broker services have Elixir manifests, pin Elixir 1.20.4/OTP
+29.1.2, compile, and run against PostgreSQL 18.6. Social exposes the internal
+account-authorization endpoint and writes `user.created` outbox events. Chat
+exposes authenticated device and KeyPackage operations; conversations and
+messages remain contract-only. The web client (apps/web) and shared TypeScript
+presets (packages/config-typescript) are scaffolded under Bun 1.4.4. Moderation,
+admin, and mobile are not scaffolded yet. Do not assume a product feature is
+runnable.
 
 **License:** AGPL-3.0.
 
@@ -52,7 +54,7 @@ Rules:
 
 | Layer | Technology | Database |
 |---|---|---|
-| Social API | Bun + TypeScript, REST | `social_db` |
+| Social API | Elixir + Phoenix API-only + Ecto, REST | `social_db` |
 | Chat service | Elixir + Phoenix + Ecto, REST + WebSockets | `chat_db` |
 | Moderation API | Bun + TypeScript, REST | `moderation_db` |
 | Event broker | Custom Elixir/OTP + Ecto, PostgreSQL-backed, transport-neutral | `broker_db` |
@@ -63,8 +65,8 @@ Rules:
 `broker_db` is owned by the broker service. No other service reads or writes it.
 
 Local development pins Elixir 1.20.4 on OTP 29.1.2 via [`.tool-versions`](.tool-versions),
-Phoenix 1.8.17 for Chat, and PostgreSQL 18.6 via [`compose.yaml`](compose.yaml).
-Service lockfiles pin the resolved dependency versions.
+Phoenix 1.8.17 for Chat and Social, Bandit 1.15, and PostgreSQL 18.6 via
+[`compose.yaml`](compose.yaml). Service lockfiles pin the resolved dependency versions.
 
 ## 4. Repository map
 
@@ -168,7 +170,7 @@ change. Do not create README stubs for leaf utility folders.
 
 ### TypeScript service module shape
 
-For Social and Moderation APIs, a module is typically:
+For the Moderation API, a module is typically:
 
 ```
 modules/<domain>/
@@ -189,7 +191,10 @@ Not every module needs every file. Do not put business logic in `routes.ts`,
 Chat code lives under contexts: `accounts`, `conversations`, `messages`,
 `attachments`, `read_receipts`, `devices`, `crypto`, `blocks`, `delivery`,
 `events`. Web code lives in `asn_chat_web` (controllers, channels, plugs).
-Contexts own business rules; controllers and channels are thin.
+Social follows the same context pattern under `asn_social`, with API-only web
+code in `asn_social_web` once scaffolded. Contexts own business rules;
+controllers and channels are thin. Social query paths must satisfy ADR 0018's
+pagination, indexing, and query-plan requirements.
 
 ### Clients
 
@@ -207,6 +212,7 @@ Detect commands from manifests; do not invent them.
 | Area | Expected command | Status |
 |---|---|---|
 | JS/TS (web) | `bun install --frozen-lockfile && bun run typecheck && bun run test && bun run build:web` | Available for `apps/web` |
+| Elixir (Social) | `cd services/social-api && mix deps.get && mix format --check-formatted && mix compile --warnings-as-errors && mix test` | Available; `mix test` requires local PostgreSQL |
 | Elixir (Chat) | `cd services/chat-service && mix deps.get && mix format --check-formatted && mix compile --warnings-as-errors && mix test` | Available; `mix test` requires local PostgreSQL |
 | Elixir (broker) | `cd services/event-broker && mix deps.get && mix format --check-formatted && mix compile --warnings-as-errors && mix test` | Available; `mix test` requires local PostgreSQL |
 | Local PostgreSQL | `docker compose up -d postgres`; wait for `healthy` | Available |
@@ -266,7 +272,7 @@ in §9 of the architecture document.
   remains open.
 - Web E2EE parity timing.
 - Broker partitioning and scaling thresholds.
-- TypeScript HTTP framework, query layer, validation, and migration tooling.
+- Moderation TypeScript HTTP framework, query layer, validation, and migration tooling.
 - React Native SQLite library, SQLCipher support, and key handling.
 - Backup recovery method (recovery key, passphrase, passkey wrapping).
 - Group key rotation and pre-join history policy.

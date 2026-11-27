@@ -30,7 +30,7 @@
 The following decisions define the current target architecture. They change only through a documented architecture decision record (ADR) in `docs/decisions/`, not by individual services independently.
 
 1. **Four independently owned PostgreSQL databases:** `social_db`, `chat_db`, `moderation_db`, and `broker_db`. They may share a physical server initially, but each has exactly one owning service and no cross-database foreign keys.
-2. **Social API:** Bun + TypeScript, exposed as a versioned REST API. It owns accounts, the follow graph, content, communities, and social-domain configuration. The HTTP framework (e.g. Elysia, Hono) and the query layer (e.g. Drizzle, Kysely) are ADR decisions; neither may leak domain rules into route handlers.
+2. **Social API:** Elixir + Phoenix API-only + Ecto, exposed as a versioned REST API. It owns accounts, the follow graph, content, communities, and social-domain configuration. [ADR 0018](../decisions/0018-social-api-elixir-phoenix-ecto.md) fixes the runtime and requires keyset pagination, bounded queries, index/query-plan evidence, and measured feed optimization. Domain rules stay in contexts, not controllers.
 3. **Chat service:** Elixir + Phoenix + Ecto. REST is used for resource operations and request/response APIs; Phoenix WebSockets/Channels are reserved for real-time chat delivery, presence, and related live updates.
 4. **Moderation service:** Bun + TypeScript, exposed through REST. It owns platform-level reports, cases, staff decisions, appeals, and audit records.
 5. **Event broker:** a **custom Elixir/OTP service** persisted in PostgreSQL (`broker_db`). The broker is transport and durable event streaming; the owning service database remains the source of truth.
@@ -60,16 +60,16 @@ ASN is composed of three business services with clear data ownership, plus a cus
 
 | Service / component | Runtime and interface | Owned database | Primary responsibilities |
 |---|---|---|---|
-| Social API | Bun + TypeScript; REST | `social_db` | Accounts, profiles, follows, blocks, posts, articles, reactions, feed inputs, activity calendar, communities, roles/channels, notification state, plan flags, account deletion workflow |
+| Social API | Elixir + Phoenix API-only + Ecto; REST | `social_db` | Accounts, profiles, follows, blocks, posts, articles, reactions, feed inputs, activity calendar, communities, roles/channels, notification state, plan flags, account deletion workflow |
 | Chat service | Elixir + Phoenix + Ecto; REST + WebSockets/Channels | `chat_db` | Friendships, chat privacy, direct/community conversations, encrypted message envelopes, public device identity and MLS KeyPackage material, upload tracking, receipts, push devices, chat streaks |
 | Moderation service | Bun + TypeScript; REST | `moderation_db` | Platform reports/cases, user-submitted evidence snapshots, moderation actions, appeals, strikes, staff audit log |
 | Event broker | Elixir/OTP + Ecto; publish/consume API, transport selected by ADR 0008 | `broker_db` | Durable event log, subscriptions, delivery state, acknowledgements, retries, dead letters, retention, replay |
 | Object storage | S3-compatible storage / Cloudflare R2 as selected | None | Public media and private/encrypted media; services store object keys, never permanent URLs |
 | Edge / reverse proxy | Nginx or equivalent routing layer | None | TLS termination, routing, request-size limits, edge protections; not a business service |
 
-The stack is intentionally polyglot. Services share API and event contracts, not a runtime, an ORM, or direct database access.
+The stack is intentionally polyglot. Services share API and event contracts, not databases, domain models, or direct database access.
 
-Local development pins Elixir 1.20.4 on OTP 29.1.2, Phoenix 1.8.17 for Chat, Ecto 3.14/Postgrex 0.22, Bandit 1.13, and PostgreSQL 18.6. The broker is Ecto-backed but transport-neutral until ADR 0008; it does not embed Phoenix. These are development baselines, not contract versions.
+Local development pins Elixir 1.20.4 on OTP 29.1.2, Phoenix 1.8.17 for Chat and Social, Ecto 3.14/Postgrex 0.22, Bandit 1.15, and PostgreSQL 18.6. The broker is Ecto-backed with a Plug/Bandit HTTP edge; it does not embed Phoenix. These are development baselines, not contract versions.
 
 ### 1.2 Runtime architecture diagram
 
@@ -87,7 +87,7 @@ flowchart TB
   ADMIN -->|HTTPS REST| EDGE
 
   subgraph Services[Business Services]
-    SOCIAL["Social API<br/>Bun + TypeScript<br/>REST /api/v1"]
+    SOCIAL["Social API<br/>Elixir + Phoenix API-only<br/>REST /api/v1"]
     CHAT["Chat Service<br/>Elixir + Phoenix<br/>REST + WebSocket"]
     MOD["Moderation Service<br/>Bun + TypeScript<br/>REST /api/v1"]
   end
@@ -272,9 +272,15 @@ sequenceDiagram
 
 The server must not publish before the transaction commits. Live WebSocket messages may be duplicated or missed during reconnects, so clients deduplicate and synchronize from a durable cursor. Only ciphertext and approved routing metadata may appear in storage, logs, traces, events, or push payloads.
 
-### 1.8 Bun runtime policy for Social API and Moderation API
+### 1.8 Runtime policies
 
-The Social and Moderation APIs target Bun with TypeScript. Bun compatibility is verified, not assumed:
+**Social API:** Elixir + Phoenix API-only + Ecto under
+[ADR 0018](../decisions/0018-social-api-elixir-phoenix-ecto.md). Query and
+endpoint performance are design constraints: keyset pagination, bounded selects,
+index/query-plan evidence, N+1 prevention, measured pool sizing, and feed
+benchmarks are required for critical paths.
+
+**Moderation API:** Bun + TypeScript. Bun compatibility is verified, not assumed:
 
 - The same automated functional, security, and API contract suites run against the Bun runtime artifact in CI.
 - Native dependencies (PostgreSQL driver, image handling, crypto bindings) are verified on the target Linux version and architecture.
@@ -683,7 +689,7 @@ Before implementation, select the recovery method and specify: backup format ver
 
 ## 4. `social_db` — Users, content and social graph
 
-The Social API (Bun + TypeScript) owns account identity, follow relations, platform-wide blocks, content, communities, member roles, notification state, subscription flags, account deletion requests, feed inputs, and activity statistics. It exposes these through REST and never reads/writes `chat_db` directly.
+The Social API (Elixir + Phoenix API-only + Ecto) owns account identity, follow relations, platform-wide blocks, content, communities, member roles, notification state, subscription flags, account deletion requests, feed inputs, and activity statistics. It exposes these through REST and never reads/writes `chat_db` directly.
 
 ### 4.1 `users`
 
@@ -963,7 +969,7 @@ Keep these value lists aligned with actual SQL checks:
 - Treat Phoenix WebSockets as a real-time delivery channel only; REST/database sync is the recovery path after reconnects.
 - Do not funnel every request or write through a single global worker, global writer, or business-orchestration service.
 - Ensure each service writes only to its own database; consumer projections are never independently authoritative.
-- Verify Bun compatibility for every Social/Moderation dependency; keep a Node LTS fallback path.
+- Verify Bun compatibility for every Moderation dependency; keep a Node LTS fallback path. Social follows ADR 0018's Elixir performance and query-optimization contract.
 - Assume broker consumers can receive redelivered events; acknowledgements do not remove the need for idempotent handlers and reconciliation.
 - Do not depend on global event ordering; rely on aggregate versions and per-aggregate in-flight limits.
 - Use a partial unique index for one active case per `(target_type, target_id)`.
@@ -988,7 +994,7 @@ Keep these value lists aligned with actual SQL checks:
 These do not block schema work, but must be finalized before protocol implementation and release:
 
 1. **REST contract and authentication:** shared error envelope, token/session strategy, service-to-service authentication (mTLS vs signed service tokens), rate-limit policy, and OpenAPI ownership. Settled in [ADR 0016](../decisions/0016-rest-authentication-and-request-policy.md) (accepted): Auth0 JWT access tokens, a namespaced `user_id` claim, per-service audiences, `X-Device-Id`, Auth0 M2M service tokens, RFC 9457 Problem Details, two-layer rate limits, and an authoritative per-request authorization check against Social. Claim namespaces and audiences are deployment configuration; the development values are placeholders.
-2. **TypeScript service stack:** HTTP framework (Elysia/Hono), query layer (Drizzle/Kysely), migration tool, validation strategy, and the Bun-to-Node fallback criteria.
+2. **Moderation TypeScript service stack:** HTTP framework (Elysia/Hono), query layer (Drizzle/Kysely), migration tool, validation strategy, and the Bun-to-Node fallback criteria. The Social API runtime is settled by [ADR 0018](../decisions/0018-social-api-elixir-phoenix-ecto.md): Elixir + Phoenix API-only + Ecto.
 3. **Broker transport:** HTTP polling/long-polling vs a persistent connection; lease renewal, max in-flight deliveries, retry/backoff defaults, dead-letter retention, event log retention, payload size limit, and replay authorization. Settled in [ADR 0008](../decisions/0008-broker-transport-and-delivery-contract.md) (accepted): HTTP claim-based pull with long-polling.
 4. **Broker partitioning and scaling:** single-node correctness first; define the measured thresholds that would justify horizontal scaling or partitioning.
 5. **Critical authorization propagation:** explicit completion semantics for blocks, suspensions, bans, community removals, and other security-sensitive state changes. Projection freshness and event lag must not silently weaken enforcement. Account status and session revocation are settled in [ADR 0016](../decisions/0016-rest-authentication-and-request-policy.md) (accepted): every authenticated request performs an authoritative check against Social. Block and community-removal propagation remain open.
@@ -1034,7 +1040,7 @@ These do not block schema work, but must be finalized before protocol implementa
 
 The complete product scope remains. This order reduces integration risk:
 
-1. Repository skeleton, CI, local environment, service health checks, and the OpenAPI/event contract conventions. Verify the Bun toolchain and the Elixir release pipeline early.
+1. Repository skeleton, CI, local environment, service health checks, and the OpenAPI/event contract conventions. Verify the Elixir release pipeline for Social/Chat/broker and the Bun toolchain for Moderation/web.
 2. Apply [ADR 0007](../decisions/0007-e2ee-protocol-selection.md): MLS is selected, and the client library gate remains open. Make every contract accept opaque envelopes. Create cross-client test vectors when a library passes the gate.
 3. Implement chat database constraints, opaque envelope storage, per-device identity and public KeyPackage registry, conversation sequencing, idempotent send, receipts, and offline sync.
 4. Implement the React Native local SQLite schema: encryption/key storage decision, WAL-aware `VACUUM INTO` snapshot, and manual encrypted Google Drive backup/restore end to end.
@@ -1050,7 +1056,7 @@ The complete product scope remains. This order reduces integration risk:
 
 ## Appendix B — Architecture Summary
 
-- **Social:** Bun + TypeScript REST API with a Bun compatibility gate and Node LTS fallback.
+- **Social:** Elixir + Phoenix API-only + Ecto REST API with keyset pagination, bounded queries, and measured PostgreSQL optimization under ADR 0018.
 - **Chat:** Elixir + Phoenix REST APIs plus WebSockets/Channels for live delivery. Durable messages and sync cursors live in `chat_db`.
 - **Moderation:** Bun + TypeScript REST API.
 - **Event broker:** custom Elixir/OTP service, PostgreSQL-backed (`broker_db`), at-least-once with idempotent consumers.

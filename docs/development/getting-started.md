@@ -1,8 +1,8 @@
 # Getting started
 
 This guide covers the parts of ASN that run today: the local PostgreSQL instance,
-the Chat service scaffold, the Event broker scaffold, and the web client scaffold (`apps/web`).
-Social, Moderation, admin, and mobile have no manifests yet.
+the Social API internal slice, the Chat service, the Event broker, and the web
+client scaffold (`apps/web`). Moderation, admin, and mobile have no manifests yet.
 
 ## Prerequisites
 
@@ -46,7 +46,20 @@ different local value. Never commit `.env`.
 See [`local-environment.md`](local-environment.md) for ports, database names, and
 reset instructions.
 
-## 3. Run the Chat service scaffold
+## 3. Run the Social API internal slice
+
+```bash
+cd services/social-api
+mix deps.get
+mix ecto.setup
+mix phx.server
+```
+
+The service starts on `http://localhost:4001`. `mix ecto.setup` seeds a
+development user, and `mix asn_social.dev_token --client-id chat-service` mints a
+local M2M token for the internal authorization endpoint. Stop it with `Ctrl+C`.
+
+## 4. Run the Chat service
 
 ```bash
 cd services/chat-service
@@ -61,7 +74,7 @@ token; `mix ecto.setup` seeds a development user, and
 `mix asn_chat.dev_token --user 0190f1e2-6d7e-7f80-b192-3d4e5f607182` mints a
 local token for it. Stop it with `Ctrl+C`.
 
-## 4. Run the Event broker scaffold
+## 5. Run the Event broker
 
 In a second terminal:
 
@@ -73,11 +86,10 @@ mix ecto.migrate
 mix run --no-halt
 ```
 
-The broker starts its OTP application and PostgreSQL repo, then waits. It has no
-listener because the transport decision is open
-([ADR 0008](../decisions/README.md)). Stop it with `Ctrl+C`.
+The broker starts its OTP application, PostgreSQL repo, and the ADR 0008 HTTP
+edge on `http://localhost:4004`. Stop it with `Ctrl+C`.
 
-## 5. Run the web client scaffold
+## 6. Run the web client
 
 In a third terminal:
 
@@ -88,7 +100,7 @@ bun run dev:web
 
 The Vite dev server starts on `http://localhost:3000`. Stop it with `Ctrl+C`.
 
-## 6. Verify
+## 7. Verify
 
 For each Elixir service:
 
@@ -102,7 +114,6 @@ For the web client:
 
 ```bash
 bun run --filter '@asn/web' typecheck
-bun run --filter '@asn/web' lint
 bun run --filter '@asn/web' test
 bun run --filter '@asn/web' build
 ```
@@ -121,14 +132,14 @@ running, the test alias fails before ExUnit starts.
 
 - The Elixir and Bun toolchains are pinned and reproducible.
 - PostgreSQL 18.6 runs locally with four service roles and isolated databases.
-- Chat and broker manifests resolve, compile, format, and boot.
+- Social, Chat, and broker manifests resolve, compile, format, and boot.
 - The web client (`apps/web`) compiles, tests, and builds under Bun with offline fonts and design tokens.
-- The Chat endpoint and broker repo connect to their databases.
+- Social exposes the internal account-authorization endpoint; Chat exposes
+  device/KeyPackage operations; the broker exposes its HTTP delivery edge.
 
 ## What does not work yet
 
-- No product REST endpoints, OpenAPI files, event schemas, migrations, or
-  background jobs.
-- No Social, Moderation, admin, or mobile manifests.
-- No Dockerfile for an application service and no CI workflow for Elixir.
+- Public Social resource APIs, Chat conversations/messages, Moderation, admin,
+  and mobile are not implemented.
+- No application Dockerfiles or production deployment manifests.
 - No health endpoints; they land with the first HTTP contract.
