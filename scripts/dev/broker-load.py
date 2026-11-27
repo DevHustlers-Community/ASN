@@ -848,7 +848,7 @@ def scenario_b4(args, base_url: str, admin_token: str) -> dict:
     run_id = uuid.uuid4().hex[:8]
     subscription = f"{BENCH_PREFIX}claim-{run_id}"
     create_subscription(base_url, admin_token, subscription, ["bench.load"])
-    token = issue_credential(base_url, admin_token, f"{BENCH_PREFIX}consumer-{run_id}")
+    token = issue_credential(base_url, admin_token, "bench-load")
 
     stop = threading.Event()
     lock = threading.Lock()
@@ -956,7 +956,7 @@ def scenario_b5(args, base_url: str, admin_token: str, db_url: str) -> dict:
     run_id = uuid.uuid4().hex[:8]
     subscription = f"{BENCH_PREFIX}idle-{run_id}"
     create_subscription(base_url, admin_token, subscription, ["bench.load"])
-    token = issue_credential(base_url, admin_token, f"{BENCH_PREFIX}idle-consumer-{run_id}")
+    token = issue_credential(base_url, admin_token, "bench-load")
 
     pgss = pg_stat_statements_available(db_url)
     before_total = pgss_calls(db_url) if pgss else 0
@@ -1027,7 +1027,7 @@ def scenario_b6(args, base_url: str, admin_token: str, db_url: str) -> dict:
     run_id = uuid.uuid4().hex[:8]
     subscription = f"{BENCH_PREFIX}drain-{run_id}"
     create_subscription(base_url, admin_token, subscription, ["bench.seeded"])
-    token = issue_credential(base_url, admin_token, f"{BENCH_PREFIX}drain-consumer-{run_id}")
+    token = issue_credential(base_url, admin_token, "bench-load")
 
     subscription_id = psql_scalar(
         db_url,

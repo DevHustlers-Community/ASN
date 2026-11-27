@@ -72,7 +72,7 @@ paths:
     post:
       tags: [consume]
       operationId: claimDeliveries
-      summary: Claim deliveries (long-poll)
+      summary: Claim deliveries for the credential's service (long-poll)
       parameters:
         - name: name
           in: path
@@ -90,10 +90,12 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ClaimResponse' }
         '404':
-          description: Unknown subscription.
+          description: Unknown subscription, or a subscription owned by another service.
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '409':
           description: Subscription is paused.
           content:
@@ -115,10 +117,12 @@ paths:
       responses:
         '200': { description: Acknowledged (or already acknowledged with the same token). }
         '404':
-          description: Unknown delivery.
+          description: Unknown delivery, or a delivery owned by another service.
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '409':
           description: Stale lease token or expired lease.
           content:
@@ -130,7 +134,7 @@ paths:
     post:
       tags: [consume]
       operationId: negativelyAcknowledgeDelivery
-      summary: Fail a delivery (reschedules with backoff or dead-letters)
+      summary: Fail a delivery for the credential's service (reschedules with backoff or dead-letters)
       parameters: [{ $ref: '#/components/parameters/DeliveryId' }]
       requestBody:
         required: true
@@ -139,6 +143,8 @@ paths:
             schema: { $ref: '#/components/schemas/LeaseToken' }
       responses:
         '200': { description: Rescheduled or dead-lettered. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/StaleLease' }
         '400': { $ref: '#/components/responses/BadRequest' }
@@ -147,7 +153,7 @@ paths:
     post:
       tags: [consume]
       operationId: extendLease
-      summary: Renew the visibility timeout
+      summary: Renew the visibility timeout for the credential's service
       parameters: [{ $ref: '#/components/parameters/DeliveryId' }]
       requestBody:
         required: true
@@ -156,6 +162,8 @@ paths:
             schema: { $ref: '#/components/schemas/LeaseToken' }
       responses:
         '200': { description: Lease extended. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/StaleLease' }
         '400': { $ref: '#/components/responses/BadRequest' }
@@ -240,7 +248,7 @@ paths:
     post:
       tags: [admin]
       operationId: createSubscription
-      summary: Create a subscription (starts at creation; no backfill)
+      summary: Create a subscription (audited; starts at creation; no backfill)
       requestBody:
         required: true
         content:
@@ -357,6 +365,8 @@ components:
         Per-service credential issued by the broker; stored hashed. Scopes:
         publish (relays), consume (claim/ack/nack/extend), admin
         (inspection, replay, skip, subscription and credential management).
+        Consume operations additionally require the credential's service_name
+        to match the subscription's consumer; cross-service resources are not found.
   parameters:
     DeliveryId:
       name: id
@@ -364,6 +374,16 @@ components:
       required: true
       schema: { type: string, format: uuid }
   responses:
+    Unauthorized:
+      description: Missing or invalid bearer token.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Forbidden:
+      description: The credential lacks the scope required for this operation.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
     NotFound:
       description: Not found.
       content:
@@ -495,6 +515,7 @@ components:
           type: string
           format: date-time
           nullable: true
+          description: Optional credential expiry; when present it must be in the future.
     CredentialIssued:
       type: object
       description: The plaintext token appears here and nowhere else.

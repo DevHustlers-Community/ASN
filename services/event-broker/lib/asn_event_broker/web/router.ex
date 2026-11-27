@@ -79,21 +79,25 @@ defmodule AsnEventBroker.Web.Router do
 
   post "/v1/subscriptions/:name/claims" do
     if Security.scope_authorized?(conn.assigns.credential, :consume) do
-      case claim_params(conn.body_params) do
-        {:ok, max, wait_ms} ->
-          case Delivery.claim(name, max, wait_ms) do
-            {:ok, deliveries} ->
-              send_json(conn, 200, %{"deliveries" => with_event_payloads(deliveries)})
+      if Security.consume_subscription_authorized?(conn.assigns.credential, name) do
+        case claim_params(conn.body_params) do
+          {:ok, max, wait_ms} ->
+            case Delivery.claim(name, max, wait_ms) do
+              {:ok, deliveries} ->
+                send_json(conn, 200, %{"deliveries" => with_event_payloads(deliveries)})
 
-            {:error, :paused} ->
-              problem(conn, 409, "subscription_paused", "subscription is paused")
+              {:error, :paused} ->
+                problem(conn, 409, "subscription_paused", "subscription is paused")
 
-            {:error, :not_found} ->
-              problem(conn, 404, "not_found", "unknown subscription")
-          end
+              {:error, :not_found} ->
+                problem(conn, 404, "not_found", "unknown subscription")
+            end
 
-        {:error, detail} ->
-          problem(conn, 400, "invalid_request", detail)
+          {:error, detail} ->
+            problem(conn, 400, "invalid_request", detail)
+        end
+      else
+        problem(conn, 404, "not_found", "unknown subscription")
       end
     else
       problem(conn, 403, "missing_scope", "consume scope required")
@@ -101,31 +105,25 @@ defmodule AsnEventBroker.Web.Router do
   end
 
   post "/v1/deliveries/:id/ack" do
-    delivery_action(conn, id, fn delivery_id ->
-      consume_action(conn, fn ->
-        Acknowledgements.ack(delivery_id, conn.body_params["lease_token"])
-      end)
+    consume_delivery_action(conn, id, fn delivery_id ->
+      Acknowledgements.ack(delivery_id, conn.body_params["lease_token"])
     end)
   end
 
   post "/v1/deliveries/:id/nack" do
-    delivery_action(conn, id, fn delivery_id ->
-      consume_action(conn, fn ->
-        Acknowledgements.nack(
-          delivery_id,
-          conn.body_params["lease_token"],
-          conn.body_params["error_kind"],
-          conn.body_params["error_message"]
-        )
-      end)
+    consume_delivery_action(conn, id, fn delivery_id ->
+      Acknowledgements.nack(
+        delivery_id,
+        conn.body_params["lease_token"],
+        conn.body_params["error_kind"],
+        conn.body_params["error_message"]
+      )
     end)
   end
 
   post "/v1/deliveries/:id/extend" do
-    delivery_action(conn, id, fn delivery_id ->
-      consume_action(conn, fn ->
-        Acknowledgements.extend(delivery_id, conn.body_params["lease_token"])
-      end)
+    consume_delivery_action(conn, id, fn delivery_id ->
+      Acknowledgements.extend(delivery_id, conn.body_params["lease_token"])
     end)
   end
 
@@ -180,12 +178,30 @@ defmodule AsnEventBroker.Web.Router do
 
   post "/v1/subscriptions" do
     if Security.scope_authorized?(conn.assigns.credential, :admin) do
+      actor = conn.assigns.credential.credential_id
+
       attrs =
         conn.body_params
         |> Map.take(["name", "consumer", "event_types", "status", "max_attempts"])
         |> Map.put("id", AsnEventBroker.UUIDv7.generate())
 
-      case %Subscription{} |> Subscription.changeset(attrs) |> AsnEventBroker.Repo.insert() do
+      case Repo.transaction(fn ->
+             case %Subscription{} |> Subscription.changeset(attrs) |> Repo.insert() do
+               {:ok, sub} ->
+                 Audit.record(actor, "subscription.create", "subscription:" <> sub.name, %{
+                   "name" => sub.name,
+                   "consumer" => sub.consumer,
+                   "event_types" => sub.event_types,
+                   "status" => to_string(sub.status),
+                   "max_attempts" => sub.max_attempts
+                 })
+
+                 sub
+
+               {:error, changeset} ->
+                 Repo.rollback(changeset)
+             end
+           end) do
         {:ok, sub} ->
           send_json(conn, 201, subscription_view(sub))
 
@@ -253,10 +269,12 @@ defmodule AsnEventBroker.Web.Router do
       body = conn.body_params
 
       with :ok <- validate_scopes(body["scopes"]),
-           {:ok, scopes} <- to_scopes(body["scopes"]) do
+           {:ok, scopes} <- to_scopes(body["scopes"]),
+           {:ok, expires_at} <- parse_expires_at(body["expires_at"]) do
         case Security.issue(body["service_name"] || "", scopes,
                actor_credential_id: actor,
-               allowed_event_types: body["allowed_event_types"]
+               allowed_event_types: body["allowed_event_types"],
+               expires_at: expires_at
              ) do
           {:ok, issued} ->
             send_json(conn, 201, %{
@@ -385,9 +403,19 @@ defmodule AsnEventBroker.Web.Router do
     end
   end
 
-  defp consume_action(conn, fun) do
+  defp consume_delivery_action(conn, raw_id, fun) do
     if Security.scope_authorized?(conn.assigns.credential, :consume) do
-      fun.() |> respond_action(conn)
+      case parse_uuid(raw_id) do
+        {:ok, delivery_id} ->
+          if Security.consume_delivery_authorized?(conn.assigns.credential, delivery_id) do
+            fun.(delivery_id) |> respond_action(conn)
+          else
+            problem(conn, 404, "not_found", "unknown delivery")
+          end
+
+        :error ->
+          problem(conn, 404, "not_found", "unknown delivery")
+      end
     else
       problem(conn, 403, "missing_scope", "consume scope required")
     end
@@ -452,6 +480,17 @@ defmodule AsnEventBroker.Web.Router do
   defp validate_scopes(_), do: {:error, "scopes must be a non-empty list of known scopes"}
 
   defp to_scopes(scopes), do: {:ok, Enum.map(scopes, &String.to_existing_atom/1)}
+
+  defp parse_expires_at(nil), do: {:ok, nil}
+
+  defp parse_expires_at(value) when is_binary(value) do
+    case DateTime.from_iso8601(value) do
+      {:ok, datetime, _offset} -> {:ok, datetime}
+      _ -> {:error, "expires_at must be an ISO 8601 timestamp"}
+    end
+  end
+
+  defp parse_expires_at(_), do: {:error, "expires_at must be an ISO 8601 timestamp"}
 
   defp credential_view(credential) do
     %{

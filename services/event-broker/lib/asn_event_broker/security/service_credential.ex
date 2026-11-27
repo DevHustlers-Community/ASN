@@ -37,6 +37,13 @@ defmodule AsnEventBroker.Security.ServiceCredential do
     |> validate_required([:credential_id, :service_name, :token_hash, :scopes])
     |> validate_length(:service_name, min: 1)
     |> validate_length(:token_hash, is: 64)
+    |> validate_change(:expires_at, fn :expires_at, expires_at ->
+      if DateTime.compare(expires_at, DateTime.utc_now()) == :gt do
+        []
+      else
+        [expires_at: "must be in the future"]
+      end
+    end)
     |> validate_change(:scopes, fn
       :scopes, scopes when is_list(scopes) ->
         known = [:publish, :consume, :admin]

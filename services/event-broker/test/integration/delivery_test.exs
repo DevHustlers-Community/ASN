@@ -163,6 +163,7 @@ defmodule AsnEventBroker.DeliveryTest do
     assert {:ok, [second]} = Delivery.claim("chat-identity", 10, 0)
     expire_lease(second.delivery_id)
     assert LeaseReaper.reap() == 1
+    force_due(second.delivery_id)
     assert {:ok, [third]} = Delivery.claim("chat-identity", 10, 0)
     refute third.lease_token == second.lease_token
     assert {:error, :stale_lease} = Acknowledgements.ack(third.delivery_id, second.lease_token)
@@ -234,6 +235,30 @@ defmodule AsnEventBroker.DeliveryTest do
 
     # A second reap finds nothing left to do.
     assert LeaseReaper.reap() == 0
+  end
+
+  test "reaper reschedules an expired lease with backoff instead of making it immediately claimable" do
+    insert_subscription("chat-identity", max_attempts: 5)
+    publish_aggregate_versions("chat-identity", [1])
+
+    {:ok, [claimed]} = Delivery.claim("chat-identity", 10, 0)
+    expire_lease(claimed.delivery_id)
+    assert LeaseReaper.reap() == 1
+
+    assert %{rows: [["pending", next_attempt_at, db_now]]} =
+             Repo.query!(
+               "SELECT state, next_attempt_at, clock_timestamp() FROM deliveries WHERE id = $1",
+               [Ecto.UUID.dump!(claimed.delivery_id)]
+             )
+
+    next_attempt = DateTime.from_naive!(next_attempt_at, "Etc/UTC")
+    now = DateTime.from_naive!(db_now, "Etc/UTC")
+    assert DateTime.compare(next_attempt, now) == :gt
+    assert {:ok, []} = Delivery.claim("chat-identity", 10, 0)
+
+    force_due(claimed.delivery_id)
+    assert {:ok, [second]} = Delivery.claim("chat-identity", 10, 0)
+    assert second.attempts == 2
   end
 
   test "extend prolongs the lease; an expired lease cannot be extended" do
