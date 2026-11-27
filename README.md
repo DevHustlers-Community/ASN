@@ -4,9 +4,11 @@ An open-source social platform for conversations, communities, and real-time
 communication.
 
 > Status: architecture and incremental service scaffolding. The Chat and Event
-> broker apps compile and run locally against PostgreSQL 18. The event-broker
-> OpenAPI contract, shared event envelope, and broker/chat migrations exist;
-> there are no product APIs or generated clients yet. The current design is
+> broker apps compile and run locally against PostgreSQL 18. Chat currently
+> exposes authenticated device and KeyPackage operations; conversations and
+> messages remain contract-only. The event-broker OpenAPI contract, shared event
+> envelope, and broker/chat migrations exist. Social and Moderation APIs, mobile,
+> admin, and generated clients are not implemented yet. The current design is
 > documented in
 > [`docs/architecture/architecture-and-schema.md`](docs/architecture/architecture-and-schema.md).
 

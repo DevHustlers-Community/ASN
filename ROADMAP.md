@@ -13,7 +13,9 @@ Status is tracked here; completed items move to the changelog.
 - [x] Cross-service e2e happy path (`tests/e2e/broker-relay.sh`): chat outbox → broker → claim → ack → metrics
 - [x] Web client scaffolding + design system
 - [x] Local Swagger UI viewer + endpoint-doc rule
+- [x] Broker consumer-service authorization, credential expiry, subscription-create audit, and database-clock lease backoff
 - [x] Chat KeyPackage **upload** ([ADR 0017](docs/decisions/0017-keypackage-storage-before-library-gate.md)): `device_key_packages` table, opaque upload endpoint, digest uniqueness, and device-owned listing. Claim is deferred.
+- [x] Cross-service E2E hardening: dedicated test databases, destructive-operation guards, and a contract-valid event from the real Chat devices context
 
 ## Next (recommended order)
 
