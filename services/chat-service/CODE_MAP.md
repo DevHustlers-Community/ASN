@@ -58,7 +58,7 @@ allocation, membership checks, or envelope validation in a controller or channel
 | `crypto/` | Planned | Protocol-neutral envelope validation and key-rotation triggers | `devices`, `messages` |
 | `blocks/` | Planned | `chat_block_edges` projection and fail-closed checks | `accounts`, `events` |
 | `delivery/` | Planned | Channel fan-out, presence, push dispatch | `conversations`, `messages`, `devices` |
-| `events/` | Implemented | Transactional outbox writer, envelope rebuild, publisher relay, consumers | `repo`, domain contexts |
+| `events/` | Implemented | Transactional outbox writer, envelope rebuild, publisher relay; projection consumers planned | `repo`, domain contexts |
 
 Contexts are added with their first schema, query, or rule. Do not commit empty
 placeholder directories.

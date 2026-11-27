@@ -15,7 +15,9 @@ defmodule AsnEventBroker.Security do
   require Logger
 
   alias AsnEventBroker.{Audit, Repo, UUIDv7}
+  alias AsnEventBroker.Delivery.Delivery
   alias AsnEventBroker.Security.ServiceCredential
+  alias AsnEventBroker.Subscriptions.Subscription
 
   @admin_scopes [:publish, :consume, :admin]
 
@@ -32,6 +34,7 @@ defmodule AsnEventBroker.Security do
   def issue(service_name, scopes, opts \\ []) do
     token = :crypto.strong_rand_bytes(32) |> Base.url_encode64(padding: false)
     allowed_event_types = Keyword.get(opts, :allowed_event_types)
+    expires_at = Keyword.get(opts, :expires_at)
 
     changeset =
       %ServiceCredential{}
@@ -40,7 +43,8 @@ defmodule AsnEventBroker.Security do
         service_name: service_name,
         token_hash: hash(token),
         scopes: scopes,
-        allowed_event_types: allowed_event_types
+        allowed_event_types: allowed_event_types,
+        expires_at: expires_at
       })
 
     # Audited per ADR 0008 §9. The plaintext token is never recorded; the
@@ -56,7 +60,8 @@ defmodule AsnEventBroker.Security do
             %{
               "service_name" => service_name,
               "scopes" => Enum.map(scopes, &to_string/1),
-              "allowed_event_types" => allowed_event_types
+              "allowed_event_types" => allowed_event_types,
+              "expires_at" => expires_at
             }
           )
 
@@ -179,6 +184,44 @@ defmodule AsnEventBroker.Security do
 
   @spec scope_authorized?(ServiceCredential.t(), atom()) :: boolean()
   def scope_authorized?(%ServiceCredential{scopes: scopes}, scope), do: scope in scopes
+
+  @doc """
+  A consume credential may only claim a subscription owned by its service.
+  Unknown and cross-service subscriptions deliberately return the same false
+  result so the edge does not disclose another service's subscription names.
+  """
+  @spec consume_subscription_authorized?(ServiceCredential.t(), String.t()) :: boolean()
+  def consume_subscription_authorized?(%ServiceCredential{service_name: service_name}, name)
+      when is_binary(name) do
+    Repo.one(
+      from s in Subscription,
+        where: s.name == ^name and s.consumer == ^service_name,
+        select: true
+    ) == true
+  end
+
+  def consume_subscription_authorized?(_credential, _name), do: false
+
+  @doc """
+  A consume credential may only act on deliveries for its own service's
+  subscriptions. The delivery and subscription are resolved in one query.
+  """
+  @spec consume_delivery_authorized?(ServiceCredential.t(), String.t()) :: boolean()
+  def consume_delivery_authorized?(%ServiceCredential{service_name: service_name}, delivery_id) do
+    with {:ok, uuid} <- Ecto.UUID.cast(delivery_id) do
+      Repo.one(
+        from d in Delivery,
+          join: s in Subscription,
+          on: d.subscription_id == s.id,
+          where: d.id == ^uuid and s.consumer == ^service_name,
+          select: true
+      ) == true
+    else
+      _ -> false
+    end
+  end
+
+  def consume_delivery_authorized?(_credential, _delivery_id), do: false
 
   @spec event_type_authorized?(ServiceCredential.t(), String.t()) :: boolean()
   def event_type_authorized?(%ServiceCredential{allowed_event_types: nil}, _type), do: true

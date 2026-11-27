@@ -16,7 +16,7 @@ defmodule AsnEventBroker.Subscriptions.Subscription do
     field :consumer, :string
     field :event_types, {:array, :string}
     field :status, Ecto.Enum, values: [:active, :paused], default: :active
-    field :max_attempts, :integer
+    field :max_attempts, :integer, default: 5
     timestamps(type: :utc_datetime_usec, inserted_at: :created_at)
   end
 
